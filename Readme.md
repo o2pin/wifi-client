@@ -1,3 +1,17 @@
+# 配置网卡
+ 1. 挂载usb网卡 (虚拟机->可移动设备->ralink 802.11 n WLAN)
+ 2. 配置网卡为monitor模式
+    ```sh
+    airmon-ng                   # 显示存在一个可用wifi设备
+    airmon-ng start wlan0     # 设置wifi网卡进入monitor模式,网卡名称变为wlan0mon
+    ```
+ 3. 测试是否支持注入        
+  ```aireplay-ng -9 wlan0mon```
+ 4. 扫描周围Wi-Fi网络       
+  ```airodump-ng wlan0mon```
+ 5. 配置网卡和网络频段一致，如网络显示为 Channel 10     
+  ```airmon-ng start wlan0mon 10```
+
 # 启动认证握手测试
 ```python3 wifi_connect.py```
 
