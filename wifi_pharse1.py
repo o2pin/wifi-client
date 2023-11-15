@@ -1,9 +1,18 @@
 import multiprocessing
 from scapy.all import *
  
-from monitor_ifc import Monitor
+from wifi_inject_utils import Monitor
 
-
+class WiFi_Object:
+    def __init__(self, ssid, psk, mac_ap, mac_cl, anonce, snonce, payload, real_MIC):
+        self.ssid = ssid
+        self.psk = psk
+        self.mac_ap = bytes.fromhex(mac_ap)
+        self.mac_cl = bytes.fromhex(mac_cl)
+        self.anonce = bytes.fromhex(anonce)
+        self.snonce = bytes.fromhex(snonce)
+        self.payload = bytes.fromhex(payload)
+        self.real_MIC = real_MIC
 
 class ConnectionPhase:
     """
@@ -95,17 +104,19 @@ class ConnectionPhase:
 
 def main():
     SSID_smylguest = 'shuimuyulin-guest'    #Network name here
-    SSID_ztkj = 'ztkj'    #Network name here
-    SSID_direct2f = 'DIRECT-2F4DDFDF'    #Network name here
-    iface = 'wlan0'         #Interface name here
-    iface_mon = 'wlan0mon'         #Interface name here
+    SSID_ztkj = 'ztkj'                      #Network name here
+    SSID_direct2f = 'DIRECT-2F4DDFDF'       #Network name here
+    
+    iface = 'wlan0'                 #Interface name here
+    iface_mon = 'wlan0mon'          #Interface name here
     iface_at0 = 'at0'
-    my_mac1 = "0e:d6:11:00:4e:10"      # kali RT3070 
+    
+    my_mac1 = "0e:d6:11:00:4e:10"               # kali RT3070 
     # my_mac2 = "9a:7a:8a:f1:cf:9b"      
     my_mac_mon = "00:a1:b0:79:03:f6"  
-    smylguest_mac = "5A:41:20:1D:26:ED"        # shuimuyulin-guest
+    smylguest_mac = "5A:41:20:1D:26:ED"         # shuimuyulin-guest
     ff_mac = "ff:ff:ff:ff:ff:ff"
-    ztkj_mac = "20:6b:e7:a3:fc:a0"
+    ztkj_mac = "20:6b:e7:a3:fc:a0"              # ztkj
     direct2f_mac = "DE:CD:2F:4D:5F:DF"
     
     #   addr1     =   (RA=DA)  目的地址
