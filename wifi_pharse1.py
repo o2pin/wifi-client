@@ -4,11 +4,12 @@ from scapy.all import *
 from wifi_inject_utils import Monitor
 
 class WiFi_Object:
-    def __init__(self, ssid, psk, mac_ap, mac_cl, anonce, snonce, payload, real_MIC):
+    def __init__(self, iface, ssid, psk, mac_ap, mac_client, anonce, snonce, payload, real_MIC):
+        self.iface = iface
         self.ssid = ssid
         self.psk = psk
         self.mac_ap = bytes.fromhex(mac_ap)
-        self.mac_cl = bytes.fromhex(mac_cl)
+        self.mac_client = bytes.fromhex(mac_client)
         self.anonce = bytes.fromhex(anonce)
         self.snonce = bytes.fromhex(snonce)
         self.payload = bytes.fromhex(payload)
@@ -99,34 +100,59 @@ class ConnectionPhase:
  
         if result_queue.get():
             self.state = "Associated"
+            
+    def deauth(self):
+        Dot11Deauth(reason=7)
 
 
 
-def main():
-    SSID_smylguest = 'shuimuyulin-guest'    #Network name here
-    SSID_ztkj = 'ztkj'                      #Network name here
-    SSID_direct2f = 'DIRECT-2F4DDFDF'       #Network name here
-    
-    iface = 'wlan0'                 #Interface name here
-    iface_mon = 'wlan0mon'          #Interface name here
-    iface_at0 = 'at0'
-    
-    my_mac1 = "0e:d6:11:00:4e:10"               # kali RT3070 
-    # my_mac2 = "9a:7a:8a:f1:cf:9b"      
-    my_mac_mon = "00:a1:b0:79:03:f6"  
-    smylguest_mac = "5A:41:20:1D:26:ED"         # shuimuyulin-guest
-    ff_mac = "ff:ff:ff:ff:ff:ff"
-    ztkj_mac = "20:6b:e7:a3:fc:a0"              # ztkj
-    direct2f_mac = "DE:CD:2F:4D:5F:DF"
-    
+def main():      
     #   addr1     =   (RA=DA)  目的地址
-    #   addr2     =   (TA=SA)  源地址
-    #   addr3     =   (BSSID/STA)   AP/Client  地址
+    #   addr2     =   (TA=SA)  中间人
+    #   addr3     =   (BSSID/STA)   AP/Client  源地址
+    mtk9271au_1_ztkj = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "ztkj", 
+        psk = "ztkj123456",         # 假密码
+        mac_ap = "206be7a3fca0",        # 20:6b:e7:a3:fc:a0  , ztkj 
+        mac_client = "001d4320192d",        # 00:1d:43:20:19:2d , mt7921au 第一块
+        anonce = "", 
+        snonce = "", 
+        payload = (""),
+        real_MIC = ""
+        )
+    rt3070_1_ztkj = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "ztkj", 
+        psk = "ztkj123456",     
+        mac_ap = "206be7a3fca0",        # 20:6b:e7:a3:fc:a0  , ztkj 
+        mac_client = "0ed611004e10",        # 0e:d6:11:00:4e:10 , mt7921au 第一块
+        anonce = "", 
+        snonce = "", 
+        payload = (""),
+        real_MIC = ""
+        )
+    rt3070_1_smylguest = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "shuimuyulin-guest", 
+        psk = "smyl2021",     
+        mac_ap = "5A41201D26ED",        # 5A:41:20:1D:26:ED   
+        mac_client = "0ed611004e10",        # 0e:d6:11:00:4e:10 , mt7921au 第一块
+        anonce = "", 
+        snonce = "", 
+        payload = (""),
+        real_MIC = ""
+        )
+    
+    # my_mac_mtk_2 = "00:1d:43:20:18:d4"            # mtk9271au
+    # ff_mac = "ff:ff:ff:ff:ff:ff"
     
     
-    monitor_ifc = iface_mon
-    sta_mac = my_mac_mon
-    bssid = ztkj_mac        # 改 wifi ap mac地址
+    config = mtk9271au_1_ztkj        # 改这里即可连接到不同wifi
+    
+    monitor_ifc = config.iface
+    sta_mac = config.mac_client
+    bssid = config.mac_ap        
     conf.iface = monitor_ifc
  
     # mac configuration per command line arguments, MACs are converted to
@@ -140,7 +166,7 @@ def main():
     else:
         print("STA is NOT authenticated to the AP!")
     time.sleep(1)
-    connection.send_assoc_request(ssid=SSID_ztkj)       # 改wifi名称
+    connection.send_assoc_request(ssid=config.ssid)
  
     if connection.state == "Associated":
         print("STA is connected to the AP!")

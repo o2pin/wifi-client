@@ -95,17 +95,17 @@ class Monitor:
         return self.assoc_found
  
     def search_auth(self, mp_queue):
-        print("\nScanning max 5 seconds for Authentication "
+        print("\nScanning max 2 seconds for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
               stop_filter=self.check_auth,
-              timeout=5)
+              timeout=2)
         mp_queue.put(self.auth_found)
  
     def search_assoc_resp(self, mp_queue):
-        print("\nScanning max 5 seconds for Association Response "
+        print("\nScanning max 2 seconds for Association Response "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11AssoResp),
               stop_filter=self.check_assoc,
-              timeout=5)
+              timeout=2)
         mp_queue.put(self.assoc_found)
