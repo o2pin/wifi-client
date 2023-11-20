@@ -8,8 +8,9 @@ class WiFi_Object:
         self.iface = iface
         self.ssid = ssid
         self.psk = psk
-        self.mac_ap = bytes.fromhex(mac_ap)
-        self.mac_client = bytes.fromhex(mac_client)
+        self.mac_ap = mac_ap
+        self.mac_client = mac_client
+        self.ff_mac = "ff:ff:ff:ff:ff:ff"
         self.anonce = bytes.fromhex(anonce)
         self.snonce = bytes.fromhex(snonce)
         self.payload = bytes.fromhex(payload)
@@ -111,11 +112,11 @@ def main():
     #   addr2     =   (TA=SA)  中间人
     #   addr3     =   (BSSID/STA)   AP/Client  源地址
     mtk9271au_1_ztkj = WiFi_Object(
-        iface = "wlan0mon",
+        iface = "wlan2mon",
         ssid = "ztkj", 
         psk = "ztkj123456",         # 假密码
-        mac_ap = "206be7a3fca0",        # 20:6b:e7:a3:fc:a0  , ztkj 
-        mac_client = "001d4320192d",        # 00:1d:43:20:19:2d , mt7921au 第一块
+        mac_ap = "20:6b:e7:a3:fc:a0",        # 20:6b:e7:a3:fc:a0  , ztkj 
+        mac_client = "00:1d:43:20:19:2d",        # 00:1d:43:20:19:2d , mt7921au 第一块
         anonce = "", 
         snonce = "", 
         payload = (""),
@@ -125,8 +126,8 @@ def main():
         iface = "wlan0mon",
         ssid = "ztkj", 
         psk = "ztkj123456",     
-        mac_ap = "206be7a3fca0",        # 20:6b:e7:a3:fc:a0  , ztkj 
-        mac_client = "0ed611004e10",        # 0e:d6:11:00:4e:10 , mt7921au 第一块
+        mac_ap = "20:6b:e7:a3:fc:a0",        # 20:6b:e7:a3:fc:a0  , ztkj 
+        mac_client = "00:a1:b0:79:03:f6",        # 00:a1:b0:79:03:f6 , Ralink 第一块
         anonce = "", 
         snonce = "", 
         payload = (""),
@@ -136,19 +137,39 @@ def main():
         iface = "wlan0mon",
         ssid = "shuimuyulin-guest", 
         psk = "smyl2021",     
-        mac_ap = "5A41201D26ED",        # 5A:41:20:1D:26:ED   
-        mac_client = "0ed611004e10",        # 0e:d6:11:00:4e:10 , mt7921au 第一块
+        mac_ap = "5A:41:20:1D:26:ED",        # 5A:41:20:1D:26:ED      shuimuyulin-guest
+        mac_client = "00:a1:b0:79:03:f6",        # 00:a1:b0:79:03:f6 , mt7921au 第一块
+        anonce = "", 
+        snonce = "", 
+        payload = (""),
+        real_MIC = ""
+        )
+    netgear_smylguest = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "shuimuyulin-guest", 
+        psk = "smyl2021",     
+        mac_ap = "5A:41:20:1D:26:ED",        # 5A:41:20:1D:26:ED   
+        mac_client = "00:26:f2:88:6c:8a",        # 00:26:f2:88:6c:8a , netgear
+        anonce = "", 
+        snonce = "", 
+        payload = (""),
+        real_MIC = ""
+        )
+    netgear_ztkj = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "ztkj", 
+        psk = "ztkj123456",     
+        mac_ap = "20:6b:e7:a3:fc:a0",        # 5A:41:20:1D:26:ED   
+        mac_client = "00:26:f2:88:6c:8a",        # 00:26:f2:88:6c:8a , netgear
         anonce = "", 
         snonce = "", 
         payload = (""),
         real_MIC = ""
         )
     
-    # my_mac_mtk_2 = "00:1d:43:20:18:d4"            # mtk9271au
-    # ff_mac = "ff:ff:ff:ff:ff:ff"
+    # client_config = {}
     
-    
-    config = mtk9271au_1_ztkj        # 改这里即可连接到不同wifi
+    config = rt3070_1_smylguest        # 改这里即可连接到不同wifi
     
     monitor_ifc = config.iface
     sta_mac = config.mac_client
@@ -175,3 +196,14 @@ def main():
  
 if __name__ == "__main__":
     sys.exit(main())
+    
+    
+    
+    
+    
+    
+"""
+# 00:1d:43:20:19:2d         mt7921au 第一块
+# 00:a1:b0:79:03:f6         Ralink 3070 第一块
+# 00:26:f2:88:6c:8a         netgear wn111 v2
+"""

@@ -62,6 +62,8 @@ class Monitor:
  
         :param packet: sniffed packet to check for matching authentication
         """
+        # print("SELF : ",self.bssid,self.bssid,self.sta_mac)
+        # print("Packet : ",packet[Dot11].addr1,packet[Dot11].addr2,packet[Dot11].addr3)
         seen_receiver = packet[Dot11].addr1
         seen_sender = packet[Dot11].addr2
         seen_bssid = packet[Dot11].addr3
@@ -72,8 +74,6 @@ class Monitor:
             self.auth_found = True
             print("Detected Authentication from Source {0}".format(
                 seen_bssid))
-            # ack_frame = self.ack(self.bssid)
-            # self.send_packet(ack_frame)
         return self.auth_found
  
     def check_assoc(self, packet):
@@ -95,17 +95,17 @@ class Monitor:
         return self.assoc_found
  
     def search_auth(self, mp_queue):
-        print("\nScanning max 2 seconds for Authentication "
+        print("\nScanning max 1 seconds for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
               stop_filter=self.check_auth,
-              timeout=2)
+              timeout=1)
         mp_queue.put(self.auth_found)
  
     def search_assoc_resp(self, mp_queue):
-        print("\nScanning max 2 seconds for Association Response "
+        print("\nScanning max 1 seconds for Association Response "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11AssoResp),
               stop_filter=self.check_assoc,
-              timeout=2)
+              timeout=1)
         mp_queue.put(self.assoc_found)
