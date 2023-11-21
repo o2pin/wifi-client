@@ -7,7 +7,7 @@ class Dot11EltRates(Packet):
     name = "802.11 Rates Information Element"
     # Our Test AP has the rates 6, 9, 12 (B), 18, 24, 36, 48 and 54, with 12
     # Mbps as the basic rate - which does not have to concern us.
-    supported_rates = [0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c]
+    supported_rates = [0x82, 0x84, 0x8b, 0x96, 0x12, 0x24, 0x48, 0x6c]
  
     fields_desc = [
         ByteField("ID", 1),

@@ -44,11 +44,12 @@
     # 接收到关联响应
     Detected Association Response from Source 20:6b:e7:a3:fc:a0
     STA is connected to the AP!
+
+    # 抓包发现 AP 发来 下一阶段 EAPOL 报文
     ```
 
 # 运行4次EAPOL协议，协商通信密钥
-    仅完成算法部分，未加入报文通信流程  -- 2023-11-15 17:12:49      
-    ```python3  wifi_pharse2.py```
+    不能触发密钥协商的风险项已经排除，剩余功能完善中。
 
 
 # 如何排查网卡注入问题和其他

@@ -150,55 +150,6 @@ def main():
         payload = (""),
         real_MIC = ""
         )
-    rt3070_1_ztkj = WiFi_Object(
-        iface = "wlan0mon",
-        ssid = "ztkj", 
-        psk = "ztkj123456",     
-        mac_ap = "20:6b:e7:a3:fc:a0",        # 20:6b:e7:a3:fc:a0  , ztkj 
-        mac_client = "00:a1:b0:79:03:f6",        # 00:a1:b0:79:03:f6 , Ralink 第一块
-        anonce = "", 
-        snonce = "", 
-        payload = (""),
-        real_MIC = ""
-        )
-    rt3070_1_smylguest = WiFi_Object(
-        iface = "wlan0mon",
-        ssid = "shuimuyulin-guest", 
-        psk = "smyl2021",     
-        mac_ap = "5A:41:20:1D:26:ED",        # 5A:41:20:1D:26:ED      shuimuyulin-guest
-        mac_client = "00:a1:b0:79:03:f6",        # 00:a1:b0:79:03:f6 , mt7921au 第一块
-        anonce = "", 
-        snonce = "", 
-        payload = (""),
-        real_MIC = ""
-        )
-    netgear_smylguest = WiFi_Object(
-        iface = "wlan1mon",
-        ssid = "shuimuyulin-guest", 
-        psk = "smyl2021",     
-        mac_ap = "5A:41:20:1D:26:ED",        # 5A:41:20:1D:26:ED   
-        mac_client = "00:26:f2:88:6c:8a",        # 00:26:f2:88:6c:8a , netgear
-        anonce = "", 
-        snonce = "", 
-        payload = (""),
-        real_MIC = ""
-        )
-    netgear_ztkj = WiFi_Object(
-        iface = "wlan0mon",
-        ssid = "ztkj", 
-        psk = "ztkj123456",     
-        mac_ap = "20:6b:e7:a3:fc:a0",          
-        mac_client = "00:26:f2:88:6c:8a",        # 00:26:f2:88:6c:8a , netgear
-        anonce = "", 
-        snonce = "", 
-        payload = (""),
-        real_MIC = ""
-        )
-    
-    ap_config = {
-        "ssid":"be#con",
-        "ap_mac":""
-    }
     
     config = mtk9271au_1_ztkj        # 改这里即可连接到不同wifi
     
@@ -224,7 +175,26 @@ def main():
         print("STA is connected to the AP!")
     else:
         print("STA is NOT connected to the AP!")
- 
+        return 0
+        
+    eapol_1_packet = sniff(iface=config.iface, filter='ether proto 0x888e', prn=lambda x: x.summary(), count=1, store=1)
+    
+    print(eapol_1_packet)
+
+    eapol_1_layer = eapol_1_packet[0].payload.payload.payload.payload
+    eapol_1_layer.display()
+    
+    # 提取 anonce
+    hexsteam = bytes(eapol_1_layer).hex()
+    print(hexsteam)
+    ANonce = hexsteam[34:98]
+    print(ANonce)
+
+    # 计算 MIC
+    SNonce = scapy.randstring(32).hex()     # 发送时 bytes.fromhex(Nonce)
+    
+    # 发送 MIC
+        
 if __name__ == "__main__":
     sys.exit(main())
     
