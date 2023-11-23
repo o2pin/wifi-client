@@ -1,4 +1,8 @@
+import multiprocessing
 from scapy.all import *
+from pbkdf2 import PBKDF2
+import binascii
+import hashlib, hmac, sys, struct
  
 class Dot11EltRates(Packet):
     """
@@ -109,3 +113,59 @@ class Monitor:
               stop_filter=self.check_assoc,
               timeout=1)
         mp_queue.put(self.assoc_found)
+        
+        
+class Calc_MIC():
+    
+    def min_max(self, a, b):
+        if len(a) != len(b): raise 'Unequal byte string lengths' 
+        for entry in list(zip( list(bytes(a)), list(bytes(b)) )):
+            if entry[0] < entry[1]: return (a, b)
+            elif entry[1] < entry[0]: return (b, a)
+        return (a, b)
+    
+    def calculate_WPA_PMK(self, psk, ssid):
+        # pmk = PBKDF2(psk, ssid, 4096).read(32)
+        pmk = hashlib.pbkdf2_hmac('sha1', psk.encode(), ssid.encode(), 4096, 32)
+        print("PMK : " + pmk.hex())
+        
+        return pmk
+
+    def calc_ptk(self, pmk, anonce, snonce, mac_ap, mac_client):
+        key_data = min(mac_ap, mac_client) + max(mac_ap, mac_client) + min(anonce,snonce) + max(anonce,snonce)
+        # ptk = customPRF512(pmk, pke, key_data)
+        macs = self.min_max(mac_ap, mac_client)
+        nonces = self.min_max(anonce, snonce)
+        ptk_inputs = b''.join([b'Pairwise key expansion\x00', macs[0], macs[1], nonces[0], nonces[1], b'\x00'])
+        ptk = hmac.new(pmk, ptk_inputs, hashlib.sha1).digest()
+        # ptk = bytes(ptk, encoding='utf-8')
+        print("PTK : " + ptk.hex())
+        
+        return ptk
+
+    def calculate_WPA_MIC(self, ptk, payload):
+        MCI_Key = ptk[:16]
+        MIC_raw = hmac.new(MCI_Key, payload, hashlib.sha1).hexdigest()
+        MIC = MIC_raw[:32]
+        print("MIC : " + MIC)
+        
+        return MIC
+
+
+    def run(self, WiFi_Object):
+        config = WiFi_Object
+        mac_ap = bytes.fromhex((config.mac_ap).replace(":",""))
+        mac_client = bytes.fromhex((config.mac_client).replace(":",""))
+        # print("-------------------------\n", mac_ap,mac_client, config.anonce, config.snonce)
+        # eapol_1
+        pmk = self.calculate_WPA_PMK(config.psk, config.ssid)
+        ptk = self.calc_ptk(pmk, config.anonce, config.snonce, mac_ap, mac_client)
+        MIC = self.calculate_WPA_MIC(ptk, config.payload)
+        # eapol_3
+        # m4_mic = "28bffa440f189c2dfe06f2e3486f3b83"
+        # m4_payload = bytes.fromhex("010300970213ca00100000000000000002777f196229c576fda543ca0c5d3c96ac23bc4c67f6e8ea618966dbc7e0150654000000000000000000000000000000008392ba0000000000000000000000000000000000000000000000000000000000003804439acbbfc551b36a900fc19eef6655f6f371c7a7e54c11a3738aef32fdf42de0cd00ac6a91360fbac7efec0f745d1f6c38f4b665642542")
+        # MIC_2 = self.calculate_WPA_MIC(ptk, m4_payload)
+        # print("MIC_2 : " + MIC_2)
+                
+        return MIC
+

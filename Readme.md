@@ -3,53 +3,79 @@
  2. 配置网卡为monitor模式
     ```sh
     airmon-ng                   # 显示存在一个可用wifi设备
-    airmon-ng start wlan0     # 设置wifi网卡进入monitor模式,网卡名称变为wlan0mon
+    airmon-ng start wlan0 6     # 设置wifi网卡进入monitor模式,网卡名称变为wlan0mon，同时设置channle 为6，和shuimuyulin同一频段      
     ```
  3. 测试是否支持注入        
   ```aireplay-ng -9 wlan0mon```
  4. 扫描周围Wi-Fi网络       
   ```airodump-ng wlan0mon```
   ![Alt text](images/Readme/image-1.png)
- 5. 配置网卡和网络频段一致，如网络显示为 Channel 10     
-  ```airmon-ng start wlan0mon 10```
+ 5. 配置网卡和网络频段一致，如网络显示为 Channel 6      
+  ```airmon-ng start wlan0mon 10```     
 
-# 启动链路认证和关联测试
-```python3 wifi_pharse1.py```
-
-启动后将连接到wifi ztkj     
-
-![Alt text](<images/Readme/image.png>)      
+# 运行后连接到 shuimuyulin
+修改connect.py中 def main() 的 WiFi_Object 和 config= 两处，然后运行
+```python3 connect.py```       
+ 
 
 抓包截图        
-![Alt text](images/Readme/1699872688929.png)
+![Alt text](images/Readme/image-2.png)
 
 
     ```sh
-    └─# /bin/python /code/contrib/wifi/wifi_connect.py
+    └─# /bin/python ./connect.py
 
-    Scanning max 5 seconds for Authentication from BSSID 20:6b:e7:a3:fc:a0
+
+    -------------------------
+    Link Authentication Request : 
+
+    Scanning max 1 seconds for Authentication from BSSID 58:41:20:fd:26:ed
     .
-    # 发送认证请求
     Sent 1 packets.
-    # 接收认证响应
-    Detected Authentication from Source 20:6b:e7:a3:fc:a0
+    Detected Authentication from Source 58:41:20:fd:26:ed
+
+    -------------------------
+    Link Authentication Response : 
     STA is authenticated to the AP!
 
-    (省略部分输出)
+    -------------------------
+    Link Assocation Request : 
 
-    Scanning max 5 seconds for Association Response from BSSID 20:6b:e7:a3:fc:a0
+    Scanning max 1 seconds for Association Response from BSSID 58:41:20:fd:26:ed
     .
-    # 发送关联请求
     Sent 1 packets.
-    # 接收到关联响应
-    Detected Association Response from Source 20:6b:e7:a3:fc:a0
+    Detected Association Response from Source 58:41:20:fd:26:ed
+
+    -------------------------
+    Link Assocation Response : 
     STA is connected to the AP!
 
-    # 抓包发现 AP 发来 下一阶段 EAPOL 报文
-    ```
+    -------------------------
+    Key (Message 1 of 4): 
+    RadioTap / Dot11 / LLC / SNAP / EAPOL EAPOL-Key / Raw
+    ANonce ,  51fb8bd4b51261357fc9f34558825d74908f02c6e00c544a155894e37d438937
 
-# 运行4次EAPOL协议，协商通信密钥
-    不能触发密钥协商的风险项已经排除，剩余功能完善中。
+    -------------------------
+    Key (Message 2 of 4): 
+    PMK : 6190c13d8a4c8225723d80324491805d4456897f7067891aff85f29920221ca8
+    PTK : 5874123e0cc46efc11f63c7f2b43211a4a7e44a1
+    MIC : 9aa92f83a5efb4833206eb9dc4c4b14f
+    .
+    Sent 1 packets.
+
+    -------------------------
+    Key (Message 3 of 4): 
+    RadioTap / Dot11 / LLC / SNAP / EAPOL EAPOL-Key / Raw
+    Encrypt Msg :  0f77bb3d31d4da44391f7ce932da97839770566ea1ef357fb0ddae59c97376fcd8068ed372642cffabab45cc8a9433c9a705d0ade0501e23
+
+    -------------------------
+    Key (Message 4 of 4): 
+    PMK : 6190c13d8a4c8225723d80324491805d4456897f7067891aff85f29920221ca8
+    PTK : 5874123e0cc46efc11f63c7f2b43211a4a7e44a1
+    MIC : 91a06cfb29bb7c4e05c33951f1f42f0f
+    .
+    Sent 1 packets.
+    ```
 
 
 # 如何排查网卡注入问题和其他
