@@ -1,6 +1,5 @@
 import multiprocessing
 from scapy.all import *
-from pbkdf2 import PBKDF2
 import binascii
 import hashlib, hmac, sys, struct
  
@@ -17,7 +16,7 @@ class WiFi_Object:
         self.anonce = bytes.fromhex(anonce)
         self.snonce = bytes.fromhex(snonce)
         self.payload = bytes.fromhex(payload)
-        self.mic = "00000000000000000000000000000000"
+        self.mic = "0" * 32
 
 def rsn():
     RSN = Dot11EltRSN(
@@ -42,7 +41,7 @@ class ConnectionPhase:
  
     def __init__(self, monitor_ifc, sta_mac, bssid):
         self.state = "Not Connected"
-        self.mon_ifc = monitor_ifc
+        self.monitor = monitor_ifc
         self.sta_mac = sta_mac
         self.bssid = bssid
  
@@ -66,11 +65,11 @@ class ConnectionPhase:
         jobs = list()
         result_queue = multiprocessing.Queue()
         receive_process = multiprocessing.Process(
-            target=self.mon_ifc.search_auth,
+            target=self.monitor.search_auth,
             args=(result_queue, ))
         jobs.append(receive_process)
         send_process = multiprocessing.Process(
-            target=self.mon_ifc.send_packet,
+            target=self.monitor.send_packet,
             args=(packet, ))
         jobs.append(send_process)
  
@@ -126,11 +125,11 @@ class ConnectionPhase:
         jobs = list()
         result_queue = multiprocessing.Queue()
         receive_process = multiprocessing.Process(
-            target=self.mon_ifc.search_assoc_resp,
+            target=self.monitor.search_assoc_resp,
             args=(result_queue,))
         jobs.append(receive_process)
         send_process = multiprocessing.Process(
-            target=self.mon_ifc.send_packet,
+            target=self.monitor.send_packet,
             args=(packet, "AssoReq", ))
         jobs.append(send_process)
  
@@ -152,30 +151,62 @@ class ConnectionPhase:
 class eapol_handshake():
     def __init__(self, DUT_Object):
         self.config = DUT_Object
+        self.eapol_3_found = False
         
+    def check_eapol(self, packet):
+        seen_receiver = packet[Dot11].addr1
+        seen_sender = packet[Dot11].addr2
+        seen_bssid = packet[Dot11].addr3
+        keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
+ 
+        if self.config.mac_ap == seen_bssid and \
+            self.config.mac_ap == seen_sender and \
+                self.config.mac_client == seen_receiver and \
+                    keyinfo == "13ca":
+            self.eapol_3_found = True
+            print("Detected EAPOL 3 from Source {0}".format(
+                seen_bssid))
+        return self.eapol_3_found
+    
+    def search_eapol(self):
+        print("\nScanning max 2 seconds for EAPOL 3 Response "
+              "from BSSID {0}".format(self.config.mac_ap))
+        eapol_p3 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL),
+              stop_filter=self.check_eapol, store=1, 
+              timeout=2)
+        
+        return eapol_p3
+    
     
     def run(self):
         
         # Key (Message 1 of 4)
         print("\n-------------------------\nKey (Message 1 of 4): ")
-        eapol_1_packet = sniff(iface=self.config.iface, filter='ether proto 0x888e', prn=lambda x: x.summary(), count=1, store=1, timeout=1)
-        
-        # print(eapol_1_packet)
-
-        eapol_1_layer = eapol_1_packet[0].payload.payload.payload.payload   
-        #                       RadioTap / Dot11 / LLC    / SNAP / EAPOL EAPOL-Key / **Raw**
+        eapol_p1 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL), count=1, store=1, timeout=1)
+        if len(eapol_p1) > 0:
+            print("成功捕获到一个符合条件的 EAPOL 数据包")
+            # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
+        else:
+            print("未成功捕获到符合条件的 EAPOL 数据包")
+            return 1
         # # 提取 802.11 层 sequence
-        eapol_1_sequence = eapol_1_packet[0].payload.SC
+        # dot11_seq = eapol_p1[0].payload.SC
+
+        # eapol_1_layer = eapol_p1[0].payload.payload.payload.payload   
+        dot1x_layer = eapol_p1[0][EAPOL]
+        #                       RadioTap / Dot11 / LLC    / SNAP / EAPOL EAPOL-Key + **Raw**
+        
         # 提取 anonce
-        hexsteam = bytes(eapol_1_layer).hex()
+        anonce = dot1x_layer.original.hex()[34:98]
         # print(hexsteam)
-        self.config.anonce = bytes.fromhex(hexsteam[34:98])
-        print("ANonce , ", (self.config.anonce).hex())
+        self.config.anonce = bytes.fromhex(anonce)
+        print("ANonce , ", (anonce))
+        
         
         # Key (Message 2 of 4)
         print("\n-------------------------\nKey (Message 2 of 4): ")
         # 计算 MIC
-        self.config.snonce = randstring(32)     # 发送时 bytes.fromhex(Nonce)
+        self.config.snonce = randstring(32)     # 发送再时 bytes.fromhex(Nonce)
         RSN = rsn()
         eapol_2_blank = "0103007702010a00000000000000000001" + (self.config.snonce).hex() + "0000000000000000000000000000000000000000000000000000000000000000" + self.config.mic + "0018" + RSN
         # print("eapol_2_blank", eapol_2_blank)
@@ -188,7 +219,6 @@ class eapol_handshake():
         t = EAPOL(bytes.fromhex(eapol_2_full))
         # print(bytes(t).hex())
         # t.display()
-        
         
         eapol_2_packet = Dot11(
             type=2, 
@@ -203,9 +233,16 @@ class eapol_handshake():
         
         # Key (Message 3 of 4)
         print("\n-------------------------\nKey (Message 3 of 4): ")
-        eapol_3_packet = sniff(iface=self.config.iface, filter='ether proto 0x888e', prn=lambda x: x.summary(), count=1, store=1, timeout=1)[0]
-        # eapol_3_packet.show()
-        eapol_3_sequence = eapol_3_packet.payload.SC
+        
+        result = self.search_eapol()
+        if len(result) > 0:
+            print("成功捕获到一个符合条件的 EAPOL 数据包")
+            # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
+        else:
+            print("未成功捕获到符合条件的 EAPOL 数据包")
+            return 1
+        eapol_3_packet = result[0]
+        # eapol_3_sequence = eapol_3_packet.payload.SC
         print("Encrypt Msg : ", bytes(eapol_3_packet.payload.payload.payload.payload).hex())
         
         # Key (Message 4 of 4)
@@ -277,9 +314,9 @@ def main():
     
     config = mtk9271au_1_smyl        # 改这里即可连接到不同wifi
     conf.iface = config.iface
-    mon_ifc = Monitor(config.iface, config.mac_client.lower(), config.mac_ap.lower())
+    monitor = Monitor(config.iface, config.mac_client.lower(), config.mac_ap.lower())
     # print(config.__dict__)
-    connectionphase_1 = ConnectionPhase(mon_ifc, config.mac_client, config.mac_ap)
+    connectionphase_1 = ConnectionPhase(monitor, config.mac_client, config.mac_ap)
     
     # 链路认证
     print("\n-------------------------\nLink Authentication Request : ")
