@@ -3,6 +3,7 @@ from scapy.all import *
 from pbkdf2 import PBKDF2
 import binascii
 import hashlib, hmac, sys, struct
+from scapy.layers.dot11 import Dot11EltRSN
  
 from wifi_inject_utils import Monitor, Calc_MIC
 
@@ -117,11 +118,8 @@ class ConnectionPhase:
             gtksa_replay_counter=3 ,
             ptksa_replay_counter=3
             )
-    
-        
 
         #  RadioTap / Dot11 / Dot11AssoReq / Dot11Elt(ssid) /  Dot11EltRSN / Dot11EltVendorSpecific
-        
         # packet.show()
         jobs = list()
         result_queue = multiprocessing.Queue()

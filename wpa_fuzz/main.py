@@ -2,6 +2,7 @@ import argparse
 import logging
 logging.basicConfig(level=logging.DEBUG)
 from connect import *
+from pprint import pprint
 
 # Metadata.
 NAME = "Wi-Fi Fuzz"
@@ -21,8 +22,6 @@ def main():
     logging.info(opt)
     logging.info('start main')  # will not print anything
 
-    # ssid = "shuimuyulin-guest", 
-    # psk = "smyl2020",       
     config = WiFi_Object(
         iface = opt.iface,
         ssid = opt.ssid if opt.ssid else "shuimuyulin", 
@@ -33,7 +32,7 @@ def main():
         snonce = "", 
         payload = ("")
     )
-    logging.info(config.__str__)
+    pprint(vars(config))
     #   addr0     =   (RA=DA)  目的地址
     #   addr1     =   (TA=SA)  中间人
     #   addr2     =   (BSSID/STA)   AP/Client  源地址
