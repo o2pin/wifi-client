@@ -1,6 +1,5 @@
 import multiprocessing
 from scapy.all import *
-from pbkdf2 import PBKDF2
 import binascii
 import hashlib, hmac, sys, struct
  
@@ -36,6 +35,8 @@ class Monitor:
         self.bssid = bssid
         self.auth_found = False
         self.assoc_found = False
+        self.eapol_1 = False
+        self.eapol_3_found = False
         self.dot11_rates = Dot11EltRates()
         
     # def ack(self, dest_mac):
@@ -114,6 +115,7 @@ class Monitor:
               timeout=1)
         mp_queue.put(self.assoc_found)
         
+    
         
 class Calc_MIC():
     
@@ -125,7 +127,6 @@ class Calc_MIC():
         return (a, b)
     
     def calculate_WPA_PMK(self, psk, ssid):
-        # pmk = PBKDF2(psk, ssid, 4096).read(32)
         pmk = hashlib.pbkdf2_hmac('sha1', psk.encode(), ssid.encode(), 4096, 32)
         print("PMK : " + pmk.hex())
         
