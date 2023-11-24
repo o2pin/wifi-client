@@ -2,6 +2,7 @@ import multiprocessing
 from scapy.all import *
 import binascii
 import hashlib, hmac, sys, struct
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap, aes_key_wrap
  
 class Dot11EltRates(Packet):
     """
@@ -133,13 +134,11 @@ class Calc_MIC():
         return pmk
 
     def calc_ptk(self, pmk, anonce, snonce, mac_ap, mac_client):
-        key_data = min(mac_ap, mac_client) + max(mac_ap, mac_client) + min(anonce,snonce) + max(anonce,snonce)
-        # ptk = customPRF512(pmk, pke, key_data)
+        print("minx_max type : ",type(mac_ap))
         macs = self.min_max(mac_ap, mac_client)
         nonces = self.min_max(anonce, snonce)
         ptk_inputs = b''.join([b'Pairwise key expansion\x00', macs[0], macs[1], nonces[0], nonces[1], b'\x00'])
         ptk = hmac.new(pmk, ptk_inputs, hashlib.sha1).digest()
-        # ptk = bytes(ptk, encoding='utf-8')
         print("PTK : " + ptk.hex())
         
         return ptk
@@ -157,16 +156,58 @@ class Calc_MIC():
         config = WiFi_Object
         mac_ap = bytes.fromhex((config.mac_ap).replace(":",""))
         mac_client = bytes.fromhex((config.mac_client).replace(":",""))
-        # print("-------------------------\n", mac_ap,mac_client, config.anonce, config.snonce)
-        # eapol_1
+        
         pmk = self.calculate_WPA_PMK(config.psk, config.ssid)
+        WiFi_Object.pmk = pmk
         ptk = self.calc_ptk(pmk, config.anonce, config.snonce, mac_ap, mac_client)
         MIC = self.calculate_WPA_MIC(ptk, config.payload)
-        # eapol_3
-        # m4_mic = "28bffa440f189c2dfe06f2e3486f3b83"
-        # m4_payload = bytes.fromhex("010300970213ca00100000000000000002777f196229c576fda543ca0c5d3c96ac23bc4c67f6e8ea618966dbc7e0150654000000000000000000000000000000008392ba0000000000000000000000000000000000000000000000000000000000003804439acbbfc551b36a900fc19eef6655f6f371c7a7e54c11a3738aef32fdf42de0cd00ac6a91360fbac7efec0f745d1f6c38f4b665642542")
-        # MIC_2 = self.calculate_WPA_MIC(ptk, m4_payload)
-        # print("MIC_2 : " + MIC_2)
                 
-        return MIC
+        return pmk, ptk, MIC
 
+
+class GTKDecrypt():
+    def __init__(self, WiFi_Object):
+        self.config = WiFi_Object
+        
+    def min_max(self, a, b):
+        if len(a) != len(b): raise 'Unequal byte string lengths' 
+        for entry in list(zip( list(bytes(a)), list(bytes(b)) )):
+            if entry[0] < entry[1]: return (a, b)
+            elif entry[1] < entry[0]: return (b, a)
+        return (a, b)
+    
+    def prf_80211i(self, K, A, B, Len):
+        R = b""
+        i = 0
+        while i <= ((Len + 159) / 160):
+            hmac_result = hmac.new(K, A + bytes.fromhex("00") + B + bytes([i]), hashlib.sha1).digest()
+            i += 1
+            R += hmac_result
+        return binascii.hexlify(R).decode()[:128]    
+    
+    def generate_ptk_kek(self):
+        mac_ap = bytes.fromhex((self.config.mac_ap).replace(":",""))
+        mac_client = bytes.fromhex((self.config.mac_client).replace(":",""))
+        macs = Calc_MIC.min_max(self, mac_ap, mac_client)
+        nonces = self.min_max(self.config.anonce, self.config.snonce)
+        ptk = self.prf_80211i(self.config.pmk, b"Pairwise key expansion", macs[0] + macs[1] + nonces[0] + nonces[1], 384)
+
+        # kck = ptk[:32]
+        kek = ptk[32:64]
+        # tk = ptk[64:96]
+        # mic_tx = ptk[96:112]
+        # mic_rx = ptk[112:]
+        
+        return ptk,  kek
+    
+    def get_gtk(self):
+        
+        ptk , kek = self.generate_ptk_kek()
+        kek = bytes.fromhex(kek)
+        encrypt_msg = self.config.encrypt_msg
+        print("生成gtk: ", kek, encrypt_msg)
+        gtk = aes_key_unwrap(kek, encrypt_msg).hex()[60:-4]
+        
+        return gtk
+    
+    

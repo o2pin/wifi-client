@@ -1,3 +1,4 @@
+from scapy.all import *
 import hashlib
 import binascii
 import hmac
@@ -5,8 +6,8 @@ import binascii
 from Crypto.Cipher import AES # pip install pycrypto pycryptodome pycryptodomex
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
-passphrase = "smyl2021x7s3"
-SSID = "shuimuyulin"
+passphrase = "smyl2021"
+SSID = "shuimuyulin-guest"
 ssid_bytes = SSID.encode()
 
 psk = hashlib.pbkdf2_hmac('sha1', passphrase.encode(), ssid_bytes, 4096, 32)
@@ -35,10 +36,10 @@ def generate_ptk(pmk, anonce, snonce, AP_Addr, STA_Addr):
 
     return ptk, kck, kek, tk, mic_tx, mic_rx
 
-anonce = bytes.fromhex("51fb8bd4b51261357fc9f34558825d74908f02c6e00c544a155894e37d438937")
-snonce = bytes.fromhex("f9de2c53852db866acc6d7ad042bc580b64a323af6fc155b84ecd1f1d7dc25d8")
-ap_mac = bytes.fromhex("58:41:20:fd:26:ed".replace(":",""))
-client_mac = bytes.fromhex("00:1d:43:20:19:2d".replace(":",""))
+anonce = bytes.fromhex("95436aa708728cc623eae215af5898dfaac67670b8a42add4db7ce2111947ed7")
+snonce = bytes.fromhex("9c5aa56d108e814a634f66139452c3cb44e85421f658e340d0b97bf5eb24f4bc")
+ap_mac = bytes.fromhex("5a:41:20:1d:26:ed".replace(":",""))
+client_mac = bytes.fromhex("e4:02:9b:5c:fe:fe".replace(":",""))
 
 ptk, kck, kek, tk, mic_tx, mic_rx = generate_ptk(pmk, anonce, snonce, ap_mac, client_mac)
 print("Generated PTK :", kck, kek, tk, mic_tx, mic_rx)
@@ -49,13 +50,14 @@ def generate_gtk(kek, key_wrap_data):
     decrypt_key_wrap_data = binascii.hexlify(decrypt_key_wrap_data).decode()
     return decrypt_key_wrap_data[60:-4]
 
-key_wrap_data = "0f77bb3d31d4da44391f7ce932da97839770566ea1ef357fb0ddae59c97376fcd8068ed372642cffabab45cc8a9433c9a705d0ade0501e23"
+key_wrap_data = "c4d03741d81435d734e740513eca39ccd0b2af992b9e6320be2493545f30b7bcaae5e44c0b29224d08d542bef18169a95880c59d47c1215e"
+# print("kek, key_wrap_data : \n", kek, key_wrap_data)
 gtk = generate_gtk(kek, key_wrap_data)
 print("GTK :", gtk)
 
 
 # ccmp 메시지 복호화
-qos_data_frame = bytes.fromhex("0f77bb3d31d4da44391f7ce932da97839770566ea1ef357fb0ddae59c97376fcd8068ed372642cffabab45cc8a9433c9a705d0ade0501e23")
+qos_data_frame = bytes.fromhex("ad1395aad2aa6888a91d3288e740678e12f020ec6c605389431d278390039f3da8f33ce5f87a9510bbc7de39fe6f02bcbbb1266caf728959061bce73ecee04f5864b57f25aa3900eb34b1c2c3ea7ea8b61c79ff390bdf9d2567566d17f1a50537d20d0ae65b724f3c3730f80d3dd924de40f00114e54ca01b338e35894441efee6be7be7b9d7737fd721f23f38901681f762eb9cdde9fc6aaf43c48be2daef15c8321c3798cd216c66e55927be7aa5b792a51a8b7debcf5e4b885ef8355ffedab3344f00c51944b0553e26b6cf6b264abca0515436b82893943168051e26cfb4455c29fd2f9136ef8b51fe2db3fe0e0a5da55d3403f5d24c33268f12672847bb1ed5307b151c32eb7b84f18795162bb44bea47db85cb063637f36d97f92e18f5cc4159db360a3db4ae08ad46621fb505bbb2fa0f82df1d1b23974b238d110faed511d2ab3ba308ad398a8d07deaeb61d5e62192c76ba38d6eb9a74bc836084066b9bed0d3fc98371b05f3921d3b65010d6f030ad4a627e95a7c3a5b53f7d2e6b646a83564fc79a9374fca274653d03ed9c8020da9352decf474d467efa964ecd1359ac4cd5bdb834f8a364f28c5d2780c774971f54bc8d0c7e967decb29fc7c853c681d9ad57df98970620b1b6b6a14445d3d35e9100f7499b1256cba9d77ffcd3a5d0eb6411f07fc2853bba7e86674638543e475b785f4857ba9c6b50ddd4a8724b72aa8de03f514c3c75476378561adc5ac7e14c3a7d57d008e3c2ccfa6d882567acbd391a390712d37d03")
 
 def decrypt_data(tk, qos_data_frame):
     ccmp_key = bytes.fromhex(tk)
@@ -66,5 +68,10 @@ def decrypt_data(tk, qos_data_frame):
     cipher = AES.new(ccmp_key, AES.MODE_CCM, nonce, mac_len=8)
     return cipher.decrypt(qos_data_frame)
 
+print("tk : ",)
 plaintext = decrypt_data(tk, qos_data_frame)
-print(plaintext.decode(errors='replace'))
+print("LLC : ", plaintext.hex())
+p = LLC(plaintext)
+
+p.display()
+# print(plaintext.decode(errors='replace'))

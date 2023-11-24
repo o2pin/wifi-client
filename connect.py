@@ -4,20 +4,23 @@ import binascii
 import hashlib, hmac, sys, struct
 from scapy.layers.dot11 import Dot11EltRSN
  
-from wifi_inject_utils import Monitor, Calc_MIC
+from wifi_inject_utils import Monitor, Calc_MIC, GTKDecrypt
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic=""):
-        self.iface = iface
-        self.ssid = ssid
-        self.psk = psk
-        self.mac_ap = mac_ap
-        self.mac_client = mac_client
-        self.ff_mac = "ff:ff:ff:ff:ff:ff"
-        self.anonce = bytes.fromhex(anonce)
-        self.snonce = bytes.fromhex(snonce)
-        self.payload = bytes.fromhex(payload)
-        self.mic = "0" * 32
+        self.iface:str  = iface
+        self.ssid:str  = ssid
+        self.psk:str  = psk
+        self.mac_ap:str  = mac_ap
+        self.mac_client:str  = mac_client
+        self.ff_mac:str  = "ff:ff:ff:ff:ff:ff"
+        self.anonce:bytes = bytes.fromhex(anonce)
+        self.snonce:bytes = bytes.fromhex(snonce)
+        self.payload:bytes = bytes.fromhex(payload)
+        self.mic:str = "0" * 32
+        self.pmk:str = "0" * 40
+        self.ptk:str = "0" * 40
+        self.encrypt_msg:bytes = "0" * 56
 
 def rsn():
     RSN = Dot11EltRSN(
@@ -139,11 +142,8 @@ class ConnectionPhase:
         if result_queue.get():
             self.state = "Associated"
             
-    def deauth(self):
-        Dot11Deauth(reason=7)
-
-    def eapol_handshake(self):
-        sniff(iface=config.iface, filter='ether proto 0x888e', prn=lambda x: x.summary(), count=1, store=1)
+    # def deauth(self):
+    #     Dot11Deauth(reason=7)
         
     
 class eapol_handshake():
@@ -155,23 +155,25 @@ class eapol_handshake():
         seen_receiver = packet[Dot11].addr1
         seen_sender = packet[Dot11].addr2
         seen_bssid = packet[Dot11].addr3
-        keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
- 
+
         if self.config.mac_ap == seen_bssid and \
             self.config.mac_ap == seen_sender and \
-                self.config.mac_client == seen_receiver and \
-                    keyinfo == "13ca":
-            self.eapol_3_found = True
-            print("Detected EAPOL 3 from Source {0}".format(
-                seen_bssid))
+                self.config.mac_client == seen_receiver:
+            keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
+            if keyinfo == "13ca":
+                self.eapol_3_found = True
+                print("Detected EAPOL 3 from Source {0}".format(seen_bssid))
+                
         return self.eapol_3_found
     
     def search_eapol(self):
-        print("\nScanning max 2 seconds for EAPOL 3 Response "
+        print("\nScanning max 2 seconds for EAPOL Message 3 of 4 "
               "from BSSID {0}".format(self.config.mac_ap))
-        eapol_p3 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL),
-              stop_filter=self.check_eapol, store=1, 
-              timeout=2)
+        
+        eapol_p3 = sniff(iface=self.config.iface, 
+                         lfilter=lambda x: x.haslayer(EAPOL),
+                         store=1, stop_filter=self.check_eapol,
+                         timeout=2)
         
         return eapol_p3
     
@@ -182,10 +184,10 @@ class eapol_handshake():
         print("\n-------------------------\nKey (Message 1 of 4): ")
         eapol_p1 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL), count=1, store=1, timeout=1)
         if len(eapol_p1) > 0:
-            print("成功捕获到一个符合条件的 EAPOL 数据包")
+            print("成功捕获到 EAPOL Message 1 of 4 ")
             # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
         else:
-            print("未成功捕获到符合条件的 EAPOL 数据包")
+            print("未成功捕获到符合条件的 EAPOL Message 1 of 4 ")
             return 1
         # # 提取 802.11 层 sequence
         # dot11_seq = eapol_p1[0].payload.SC
@@ -211,7 +213,10 @@ class eapol_handshake():
         self.config.payload = bytes.fromhex(eapol_2_blank)
 
         calc_mic = Calc_MIC()
-        self.config.mic = calc_mic.run(self.config)
+        self.config.pmk, self.config.ptk, self.config.mic = calc_mic.run(self.config)
+        # DUT_Object.pmk = self.config.pmk
+        # DUT_Object.ptk = self.config.ptk
+        
         eapol_2_full = "0103007702010a00000000000000000001" + (self.config.snonce).hex() +"0000000000000000000000000000000000000000000000000000000000000000" + self.config.mic + "0018" + RSN
         # print("eapol_2_full: ",eapol_2_full)
         t = EAPOL(bytes.fromhex(eapol_2_full))
@@ -233,20 +238,30 @@ class eapol_handshake():
         print("\n-------------------------\nKey (Message 3 of 4): ")
         
         result = self.search_eapol()
+        print(result)
         if len(result) > 0:
-            print("成功捕获到一个符合条件的 EAPOL 数据包")
+            print("成功捕获到 EAPOl Message 3 of 4")
             # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
         else:
-            print("未成功捕获到符合条件的 EAPOL 数据包")
+            print("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
             return 1
-        eapol_3_packet = result[0]
+        eapol_3_packet = result[-1]
         # eapol_3_sequence = eapol_3_packet.payload.SC
-        print("Encrypt Msg : ", bytes(eapol_3_packet.payload.payload.payload.payload).hex())
+        encrypt_msg :bytes = bytes(eapol_3_packet[EAPOL][Raw].original)[-56:]
+        self.config.encrypt_msg = encrypt_msg
+        print("Encrypt Msg : ", encrypt_msg)
+        
+        # print(self.config.pmk, self.config.encrypt_msg)
+        
+        # 解密加密广播报文的 gtk，用来加密arp广播
+        gtk_decrypt = GTKDecrypt(self.config)
+        gtk = gtk_decrypt.get_gtk()
+        print("GTK : ", gtk)
         
         # Key (Message 4 of 4)
         print("\n-------------------------\nKey (Message 4 of 4): ")
         self.config.payload = bytes.fromhex("0103005f02030a00000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009f21ad3b5ec5adb6bfeb41b1d7a54d860000".replace("9f21ad3b5ec5adb6bfeb41b1d7a54d86","00000000000000000000000000000000"))
-        MIC_2 = calc_mic.run(self.config)
+        pmk, ptk, MIC_2 = calc_mic.run(self.config)
         # print("MIC_2 : ", MIC_2)
         eapol_4_full = "0103005f02030a00000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000009f21ad3b5ec5adb6bfeb41b1d7a54d860000".replace("9f21ad3b5ec5adb6bfeb41b1d7a54d86",MIC_2)
         t = EAPOL(bytes.fromhex(eapol_4_full))
@@ -279,7 +294,7 @@ def main():
     #     payload = ("")
     #     )
     mtk9271au_1_smyl = WiFi_Object(
-        iface = "wlan1mon",
+        iface = "wlan1",
         ssid = "shuimuyulin", 
         psk = "smyl2021x7s3",       
         mac_ap = "58:41:20:FD:26:ED",           # xiaomi  hotpoint
@@ -298,16 +313,6 @@ def main():
     #     snonce = "", 
     #     payload = ("")
     #     )
-    # mtk9271au_1_ztkj = WiFi_Object(
-    #     iface = "wlan1mon",
-    #     ssid = "ztkj", 
-    #     psk = "ztkj123456",         # 假密码
-    #     mac_ap = "20:6b:e7:a3:fc:a0",        # 20:6b:e7:a3:fc:a0  , ztkj 
-    #     mac_client = "00:1d:43:20:19:2d",        # 00:1d:43:20:19:2d , mt7921au 第一块
-    #     anonce = "", 
-    #     snonce = "", 
-    #     payload = ("")
-    #     )
     
     
     config = mtk9271au_1_smyl        # 改这里即可连接到不同wifi
@@ -320,7 +325,7 @@ def main():
     print("\n-------------------------\nLink Authentication Request : ")
     connectionphase_1.send_authentication()
     
-    print("\n-------------------------\nLink Authentication Response : ")
+    # print("\n-------------------------\nLink Authentication Response : ")
     if connectionphase_1.state == "Authenticated":
         print("STA is authenticated to the AP!")
     else:
@@ -331,7 +336,7 @@ def main():
     print("\n-------------------------\nLink Assocation Request : ")
     connectionphase_1.send_assoc_request(ssid=config.ssid)
     
-    print("\n-------------------------\nLink Assocation Response : ")
+    # print("\n-------------------------\nLink Assocation Response : ")
     if connectionphase_1.state == "Associated":
         print("STA is connected to the AP!")
     else:
