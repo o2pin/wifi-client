@@ -151,38 +151,41 @@ class eapol_handshake():
         self.config = DUT_Object
         self.eapol_3_found = False
         
-    def check_eapol(self, packet):
-        seen_receiver = packet[Dot11].addr1
-        seen_sender = packet[Dot11].addr2
-        seen_bssid = packet[Dot11].addr3
+    # def check_eapol(self, packet):
+    #     seen_receiver = packet[Dot11].addr1
+    #     seen_sender = packet[Dot11].addr2
+    #     seen_bssid = packet[Dot11].addr3
 
-        if self.config.mac_ap == seen_bssid and \
-            self.config.mac_ap == seen_sender and \
-                self.config.mac_client == seen_receiver:
-            keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
-            if keyinfo == "13ca":
-                self.eapol_3_found = True
-                print("Detected EAPOL 3 from Source {0}".format(seen_bssid))
-                
-        return self.eapol_3_found
+    #     if self.config.mac_ap == seen_bssid and \
+    #         self.config.mac_ap == seen_sender and \
+    #             self.config.mac_client == seen_receiver:
+    #         keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
+    #         if keyinfo == "13ca":
+    #             self.eapol_3_found = True
+    #             print("Detected EAPOL 3 from Source {0}".format(seen_bssid))
+    #     # print("self.eapol_3_found : ", self.eapol_3_found)
+    #     return self.eapol_3_found
     
-    def search_eapol(self):
-        print("\nScanning max 2 seconds for EAPOL Message 3 of 4 "
-              "from BSSID {0}".format(self.config.mac_ap))
+    # def search_eapol(self):
+    #     print("\nScanning max 2 seconds for EAPOL Message 3 of 4 "
+    #           "from BSSID {0}".format(self.config.mac_ap))
         
-        eapol_p3 = sniff(iface=self.config.iface, 
-                         lfilter=lambda x: x.haslayer(EAPOL),
-                         store=1, stop_filter=self.check_eapol,
-                         timeout=2)
+    #     eapol_p3 = sniff(iface=self.config.iface, 
+    #                      lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(EAPOL)[Raw].original[1:3].hex()  == "13ca")) ,
+    #                      store=1, stop_filter=self.check_eapol,
+    #                      timeout=2)
         
-        return eapol_p3
+    #     return eapol_p3
     
     
     def run(self):
         
         # Key (Message 1 of 4)
         print("\n-------------------------\nKey (Message 1 of 4): ")
-        eapol_p1 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL), count=1, store=1, timeout=1)
+        # eapol_p1 = sniff(iface=self.config.iface, lfilter=lambda x: x.haslayer(EAPOL), count=1, store=1, timeout=1)
+        eapol_p1 = sniff(iface=self.config.iface, 
+                         lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(EAPOL)[Raw].original[1:3].hex()  == "008a")) , 
+                         count=1, store=1, timeout=2)
         if len(eapol_p1) > 0:
             print("成功捕获到 EAPOL Message 1 of 4 ")
             # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
@@ -237,11 +240,13 @@ class eapol_handshake():
         # Key (Message 3 of 4)
         print("\n-------------------------\nKey (Message 3 of 4): ")
         
-        result = self.search_eapol()
-        print(result)
+        result = sniff(iface=self.config.iface, 
+                         lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(EAPOL)[Raw].original[1:3].hex()  == "13ca")) ,
+                         store=1, count=1,
+                         timeout=2)
+        # print(result)
         if len(result) > 0:
             print("成功捕获到 EAPOl Message 3 of 4")
-            # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
         else:
             print("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
             return 1
