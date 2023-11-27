@@ -5,8 +5,8 @@ import hashlib, hmac, sys, struct
 from scapy.layers.dot11 import Dot11EltRSN
 from Crypto.Cipher import AES
 
-from wifi_inject_utils import Monitor
-from wifi_crypt_utils import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from utils_wifi_inject import Monitor
+from utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic=""):

@@ -13,6 +13,13 @@
  5. 配置网卡和网络频段一致，如网络显示为 Channel 6      
   ```airmon-ng start wlan0mon 10```     
 
+
+# 安装依赖
+```sh
+pip uninstall pycrypto
+pip install pycryptodemo
+```
+
 # 运行后连接到 shuimuyulin
 修改connect.py中 def main() 的 WiFi_Object 和 config= 两处，然后运行
 ```python3 connect.py```       
