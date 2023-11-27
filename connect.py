@@ -3,8 +3,10 @@ from scapy.all import *
 import binascii
 import hashlib, hmac, sys, struct
 from scapy.layers.dot11 import Dot11EltRSN
- 
-from wifi_inject_utils import Monitor, Calc_MIC, GTKDecrypt
+from Crypto.Cipher import AES
+
+from wifi_inject_utils import Monitor
+from wifi_crypt_utils import Calc_MIC, GTKDecrypt, Generate_Plain_text
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic=""):
@@ -150,32 +152,6 @@ class eapol_handshake():
     def __init__(self, DUT_Object):
         self.config = DUT_Object
         self.eapol_3_found = False
-        
-    # def check_eapol(self, packet):
-    #     seen_receiver = packet[Dot11].addr1
-    #     seen_sender = packet[Dot11].addr2
-    #     seen_bssid = packet[Dot11].addr3
-
-    #     if self.config.mac_ap == seen_bssid and \
-    #         self.config.mac_ap == seen_sender and \
-    #             self.config.mac_client == seen_receiver:
-    #         keyinfo = packet[EAPOL][Raw].original[1:3].hex()        # 802.1x auth key information
-    #         if keyinfo == "13ca":
-    #             self.eapol_3_found = True
-    #             print("Detected EAPOL 3 from Source {0}".format(seen_bssid))
-    #     # print("self.eapol_3_found : ", self.eapol_3_found)
-    #     return self.eapol_3_found
-    
-    # def search_eapol(self):
-    #     print("\nScanning max 2 seconds for EAPOL Message 3 of 4 "
-    #           "from BSSID {0}".format(self.config.mac_ap))
-        
-    #     eapol_p3 = sniff(iface=self.config.iface, 
-    #                      lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(EAPOL)[Raw].original[1:3].hex()  == "13ca")) ,
-    #                      store=1, stop_filter=self.check_eapol,
-    #                      timeout=2)
-        
-    #     return eapol_p3
     
     
     def run(self):
@@ -191,7 +167,7 @@ class eapol_handshake():
             # 可以进一步处理捕获到的数据包，例如访问第一个数据包 p[0]
         else:
             print("未成功捕获到符合条件的 EAPOL Message 1 of 4 ")
-            return 1
+            sys.exit(1)
         # # 提取 802.11 层 sequence
         # dot11_seq = eapol_p1[0].payload.SC
 
@@ -249,7 +225,7 @@ class eapol_handshake():
             print("成功捕获到 EAPOl Message 3 of 4")
         else:
             print("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
-            return 1
+            sys.exit(1)
         eapol_3_packet = result[-1]
         # eapol_3_sequence = eapol_3_packet.payload.SC
         encrypt_msg :bytes = bytes(eapol_3_packet[EAPOL][Raw].original)[-56:]
@@ -260,8 +236,9 @@ class eapol_handshake():
         
         # 解密加密广播报文的 gtk，用来加密arp广播
         gtk_decrypt = GTKDecrypt(self.config)
-        gtk = gtk_decrypt.get_gtk()
+        gtk , tk = gtk_decrypt.get_gtk()
         print("GTK : ", gtk)
+        print("TK : ", tk)
         
         # Key (Message 4 of 4)
         print("\n-------------------------\nKey (Message 4 of 4): ")
@@ -281,12 +258,11 @@ class eapol_handshake():
         # eapol_4_packet.show()
         send(eapol_4_packet, iface = self.config.iface)
     
-
-
+        return tk
 def main():      
-    #   addr1     =   (RA=DA)  目的地址
-    #   addr2     =   (TA=SA)  中间人
-    #   addr3     =   (BSSID/STA)   AP/Client  源地址
+    #   addr1     =   (RA=DA)  
+    #   addr2     =   (TA=SA)  
+    #   addr3     =   (BSSID/STA)   AP/Client MAC
     
     # mtk9271au_1_smylguest = WiFi_Object(
     #     iface = "wlan1mon",
@@ -335,7 +311,7 @@ def main():
         print("STA is authenticated to the AP!")
     else:
         print("STA is NOT authenticated to the AP!")
-        return 1
+        sys.exit(1)
     time.sleep(1)
     # 链路关联
     print("\n-------------------------\nLink Assocation Request : ")
@@ -346,12 +322,44 @@ def main():
         print("STA is connected to the AP!")
     else:
         print("STA is NOT connected to the AP!")
-        return 1
+        sys.exit(1)
     
     # 密钥协商
     connectionphase_2 = eapol_handshake(config)
-    connectionphase_2.run()
+    TK = connectionphase_2.run()
     
+    if len(TK) > 1:
+        print("STA is connected to the AP!")
+    else:
+        sys.exit(1)
+    
+    # 和 AP 加密通信
+    print("\n-------------------------\nSend Request : ")
+    print(" TK : ", TK)
+    # TK = config.ptk[32:48]
+    PN = "000000000001" 
+    nonce = bytes.fromhex("00") + bytes.fromhex("001d4320192d") + bytes.fromhex(PN)          
+    
+    generate_payload = Generate_Plain_text()
+    Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp
+    Plain_text.show()
+    Plain_text = bytes(Plain_text)
+    
+    cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, nonce, mac_len = 8)
+    Ciphertext = cipher.encrypt(Plain_text)
+    print("密文 : ", Ciphertext)
+    
+    
+    dhcp_req = Dot11(
+            type=2, 
+            subtype=8,   
+            FCfield=65,
+            addr1=config.mac_ap,
+            addr2=config.mac_client, 
+            addr3=config.ff_mac, 
+            SC=64)  / Dot11QoS() / Dot11CCMP(ext_iv=1, PN0=1) / Ciphertext
+    dhcp_req.display()
+    send(dhcp_req, iface = config.iface)
     
 if __name__ == "__main__":
     sys.exit(main())

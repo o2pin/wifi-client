@@ -68,7 +68,7 @@ def decrypt_data(tk, qos_data_frame):
     cipher = AES.new(ccmp_key, AES.MODE_CCM, nonce, mac_len=8)
     return cipher.decrypt(qos_data_frame)
 
-print("tk : ",)
+print("tk : ",tk)
 plaintext = decrypt_data(tk, qos_data_frame)
 print("LLC : ", plaintext.hex())
 p = LLC(plaintext)
