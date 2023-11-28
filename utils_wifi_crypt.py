@@ -24,7 +24,7 @@ class Calc_MIC():
         return pmk
 
     def calc_ptk(self, pmk, anonce, snonce, mac_ap, mac_client):
-        print("minx_max type : ",type(mac_ap))
+        # print("minx_max type : ",type(mac_ap))
         macs = self.min_max(mac_ap, mac_client)
         nonces = self.min_max(anonce, snonce)
         ptk_inputs = b''.join([b'Pairwise key expansion\x00', macs[0], macs[1], nonces[0], nonces[1], b'\x00'])
@@ -128,7 +128,7 @@ class Generate_Plain_text():
             
             Plain_text = LLC() / SNAP() / ip / udp / dhcp_layer
         elif type == "arp"    :
-            arp = ARP(hwsrc="00:1d:43:20:19:2d", psrc="0.0.0.0", hwdst="00:00:00:00:00:00", pdst="192.168.4.119")
+            arp = ARP(hwsrc="00:1d:43:20:19:2d", psrc="192.168.4.222", hwdst="00:00:00:00:00:00", pdst="192.168.4.1")
             Plain_text = LLC() / SNAP() / arp
         else:
             print("Wrong type ")

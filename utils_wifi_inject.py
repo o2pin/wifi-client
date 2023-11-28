@@ -18,6 +18,23 @@ class Dot11EltRates(Packet):
     for index, rate in enumerate(supported_rates):
         fields_desc.append(ByteField("supported_rate{0}".format(
             index + 1), rate))
+        
+class RSN():
+    def get_rsn_info(self):
+        rsn_info = Dot11EltRSN(
+                len=22,         # len=22  smyl    /      len=20   xiaomi hotspot
+                group_cipher_suite=RSNCipherSuite(),
+                nb_pairwise_cipher_suites=1,
+                pairwise_cipher_suites=[RSNCipherSuite()],
+                nb_akm_suites=1,
+                akm_suites=[AKMSuite(suite=2)], # 重要, =2 代表 psk
+                mfp_capable=0,                  # 管理帧保护, =1 or =0, 受保护的管理帧强制对断开连接帧进行加密
+                mfp_required=0 ,
+                gtksa_replay_counter=0 ,      
+                ptksa_replay_counter=0
+                )
+        
+        return rsn_info
  
 class Monitor:
     def __init__(self, mon_ifc, sta_mac, bssid):
