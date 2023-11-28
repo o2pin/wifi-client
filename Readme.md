@@ -17,7 +17,7 @@
 # 安装依赖
 ```sh
 pip uninstall pycrypto
-pip install pycryptodemo
+pip install pycryptodome
 ```
 
 # 运行后连接到 shuimuyulin
