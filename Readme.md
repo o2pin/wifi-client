@@ -21,18 +21,15 @@ pip install pycryptodome
 ```
 
 # 运行后连接到 shuimuyulin
-修改connect.py中 def main() 的 WiFi_Object 和 config= 两处，然后运行
-```python3 connect.py```       
+修改main.py中 def main() 的 WiFi_Object 和 config= 两处，然后运行
+```python3 main.py```       
  
 
 抓包截图        
 ![Alt text](images/Readme/image-2.png)
 
-
     ```sh
-    └─# /bin/python ./connect.py
-
-
+    └─# /bin/python ./main.py
     -------------------------
     Link Authentication Request : 
 
@@ -88,3 +85,48 @@ pip install pycryptodome
 # 如何排查网卡注入问题和其他
 >Wi-Fi 帧注入的正确性 - XWiki   
 >https://wiki.dev.shuimuyulin.com/xwiki/bin/view/Main/xfuzz-protocol/WIFI%20FUZZ/Wi-Fi%20%E5%B8%A7%E6%B3%A8%E5%85%A5%E7%9A%84%E6%AD%A3%E7%A1%AE%E6%80%A7/
+
+
+# 运行和调试
+
+## 命令行执行
+使用python venv环境执行
+scapy 2.4.5 版本有问题，提前确认版本
+关闭其他影响包注入的程序
+执行前需要确认网卡监听模式，且channel需要配置好
+``` bash
+sudo airmon-ng check
+sudo airmon-ng check kill
+sudo airmon-ng start wlan0 6
+sudo ~/wifi-framework/setup/venv/bin/python3 ./main.py --help
+sudo ~/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan0mon
+```
+
+## vscode 调试配置
+可以在调试配置文件中传递入参
+
+``` json : lauch.json
+{
+    // 使用 IntelliSense 了解相关属性。 
+    // 悬停以查看现有属性的描述。
+    // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: shuimuyulin",
+            "type": "python",
+            "python": "/home/peter/project/wifi-framework/setup/venv/bin/python3",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "--iface",
+                "wlan0mon",
+                "--client-mac",
+                "00:1d:43:20:18:d4"
+            ],
+            "justMyCode": true,
+        }
+    ]
+}
+```
