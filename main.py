@@ -106,7 +106,7 @@ def main():
     
     # 和 AP 加密通信
     logging.info("\n-------------------------Send Request : ")
-    logging.info(" TK : ", TK)
+    logging.info(" TK : ".format(TK))
     # TK = ptk[32:48]
     PN = "000000000001"      # = Dot11CCMP(ext_iv=1, PN0=1) = Dot11CCMP(bytes.fromhex("0100002000000000"))
     qos = bytes.fromhex("00")       # 0 = tk , 1 = gtk
@@ -119,8 +119,7 @@ def main():
     
     cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, nonce, mac_len = 8)
     Ciphertext = cipher.encrypt(Plain_text)
-    logging.info("密文 : ", Ciphertext)
-    
+    logging.info("密文 : {}".format(Ciphertext))
     
     dhcp_req = Dot11(
             type=2, 
