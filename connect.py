@@ -186,7 +186,7 @@ class eapol_handshake():
         result = sniff(iface=self.config.iface, 
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 5066 )) ,
                          store=1, count=1,
-                         timeout=2)
+                         timeout=1)
         # print(result)
         if len(result) > 0:
             print("成功捕获到 EAPOl Message 3 of 4")
@@ -237,8 +237,8 @@ class eapol_handshake():
 
 def main():      
 
-    mtk9271au_1_smyl = WiFi_Object(
-        iface = "wlan1",
+    smyl = WiFi_Object(
+        iface = "wlan0mon",
         ssid = "shuimuyulin", 
         psk = "smyl2021x7s3",       
         mac_ap = "58:41:20:FD:26:ED",           # smyl
@@ -247,11 +247,21 @@ def main():
         snonce = "", 
         payload = ("")
         )
+    smylguest = WiFi_Object(
+        iface = "wlan0mon",
+        ssid = "shuimuyulin-guest", 
+        psk = "smyl2021",       
+        mac_ap = "5a:41:20:1d:26:ed",           #
+        mac_client = "00:1d:43:20:19:2d",        # 00:1d:43:20:19:2d , mt7921au 第一块
+        anonce = "", 
+        snonce = "", 
+        payload = ("")
+        )
     xiaom_hotspot = WiFi_Object(
-        iface = "wlan1",
+        iface = "wlan0mon",
         ssid = "testwifi", 
         psk = "99999999",       
-        mac_ap = "46:54:c2:ab:7b:c2",           # xiaomi hotspot
+        mac_ap = "F6:71:82:F6:32:19",           # xiaomi hotspot
         mac_client = "00:1d:43:20:19:2d",        # mt7921au 第一块
         # mac_client = "00:a1:b0:79:03:f6",        # rt3070 第一块
         anonce = "", 
@@ -260,10 +270,10 @@ def main():
         )
     
     
-    config = mtk9271au_1_smyl        # 改这里即可连接到不同wifi
+    config = smyl        # 改这里即可连接到不同wifi
+    
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()       # rsn info
-    
     conf.iface = config.iface
     monitor = Monitor(config.iface, config.mac_client.lower(), config.mac_ap.lower())
     connectionphase_1 = ConnectionPhase(monitor, config.mac_client, config.mac_ap)
@@ -301,8 +311,9 @@ def main():
     print("\n-------------------------\nSend Request : ")
     print(" TK : ", TK)
     # TK = ptk[32:48]
-    PN = "000000000001" 
-    nonce = bytes.fromhex("00") + bytes.fromhex(config.mac_client.replace(":", "")) + bytes.fromhex(PN)          
+    PN = "000000000001"      # = Dot11CCMP(ext_iv=1, PN0=1) = Dot11CCMP(bytes.fromhex("0100002000000000"))
+    qos = bytes.fromhex("00")       # 0 = tk , 1 = gtk
+    nonce = qos + bytes.fromhex(config.mac_client.replace(":", "")) + bytes.fromhex(PN)
     
     generate_payload = Generate_Plain_text()
     Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp

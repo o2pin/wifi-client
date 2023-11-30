@@ -44,6 +44,7 @@ class Calc_MIC():
 
     def run(self, WiFi_Object):
         config = WiFi_Object
+        print(config)
         mac_ap = bytes.fromhex((config.mac_ap).replace(":",""))
         mac_client = bytes.fromhex((config.mac_client).replace(":",""))
         
