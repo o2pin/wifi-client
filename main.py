@@ -1,8 +1,11 @@
 import argparse
 import logging
-logging.basicConfig(level=logging.DEBUG)
 from connect import *
 from pprint import pprint
+from utils.interface_mode import *
+
+FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d %(message)s'
+logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 # Metadata.
 NAME = "Wi-Fi Fuzz"
@@ -11,23 +14,25 @@ VERSION = "1.0"
 def main():      
     # Arguments.
     parser = argparse.ArgumentParser(description=f"{NAME} (Version {VERSION}).")
-    parser.add_argument('--iface', type=str, default="wlan1", help="Interface.")
-    parser.add_argument('--client-mac', type=str, default="00:1d:43:20:18:d4", help="Config ap mac.")
-    parser.add_argument('--ssid', type=str, default="shuimuyulin", help="Name of test to run.")
-    parser.add_argument('--ap-mac', type=str, default="58:41:20:FD:26:ED", help="Config ap mac.")
-    parser.add_argument('--psk', type=str, default="smyl2021x7s3", help="Config wifi psk.")
-    parser.add_argument('--channel', type=str, default=None, help="Wlan Channel.")
-    parser.add_argument('--debug', type=int, default=0, help="Debug output level.")
+    parser.add_argument('--iface', type=str, required=True, help="Interface name.")
+    parser.add_argument('--mac-client', type=str, default=None, help="Interface mac.")
+    parser.add_argument('--ssid', type=str, required=True, help="SSID.")
+    parser.add_argument('--mac-ap', type=str, required=True, help="AP mac.")
+    parser.add_argument('--psk', type=str, required=True, help="WIFI psk.")
+    # parser.add_argument('--channel', type=str, default=None, help="Wlan Channel.")
+    # parser.add_argument('--debug', type=int, default=0, help="Debug output level.")
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
 
+    iface = ensure_interface_mode(opt.iface)
+    mac_client = opt.mac_client if opt.mac_client else get_iface_mac(iface)
     config = WiFi_Object(
-        iface = opt.iface,
+        iface = iface,
         ssid = opt.ssid, 
         psk = opt.psk,       
-        mac_ap = opt.ap_mac,
-        mac_client = opt.client_mac,
+        mac_ap = opt.mac_ap,
+        mac_client = mac_client,
         anonce = "", 
         snonce = "", 
         payload = ("")
