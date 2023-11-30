@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 from scapy.all import *
 from scapy.contrib.wpa_eapol import *
@@ -118,8 +119,7 @@ class ConnectionPhase:
  
         if result_queue.get():
             self.state = "Associated"
-        
-    
+
 class eapol_handshake():
     def __init__(self, DUT_Object, rsn_info):
         self.config = DUT_Object
@@ -127,13 +127,12 @@ class eapol_handshake():
         self.rsn_info = rsn_info
     
     def run(self):
-        
         # Key (Message 1 of 4)
         logging.info("\n-------------------------Key (Message 1 of 4): ")
         # 遗留问题：可能捕获到别人协商过程的eapol包
         eapol_p1 = sniff(iface=self.config.iface, 
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 138)) , 
-                         count=1, store=1, timeout=2)
+                         count=1, store=1, timeout=2, prn = lambda x: logging.debug(x))
         if len(eapol_p1) > 0:
             logging.info("成功捕获到 EAPOL Message 1 of 4 ")
         else:
@@ -144,15 +143,13 @@ class eapol_handshake():
         # eapol_1_layer = eapol_p1[0].payload.payload.payload.payload   
         # RadioTap / Dot11 / LLC / SNAP / EAPOL EAPOL-Key + **Raw**
         eapol_1_packet = eapol_p1[0][EAPOL]
-
         replay_counter = eapol_1_packet[WPA_key].replay_counter
         # 提取 anonce
         self.config.anonce = eapol_1_packet[WPA_key].nonce
-        logging.debug("ANonce , ", (self.config.anonce).hex())
-        
+        logging.debug("ANonce {}".format((self.config.anonce).hex()))
         
         # Key (Message 2 of 4)
-        logging.debug("\n-------------------------Key (Message 2 of 4): ")
+        logging.debug("-------------------------Key (Message 2 of 4): ")
         # 计算 MIC
         self.config.snonce = randstring(32)
         eapol_2 = EAPOL(version=1, type=3, len=119) / WPA_key(
@@ -182,13 +179,13 @@ class eapol_handshake():
         send(eapol_2_packet, iface = self.config.iface)
         
         # Key (Message 3 of 4)
-        print("\n-------------------------\nKey (Message 3 of 4): ")
+        logging.debug("\n-------------------------Key (Message 3 of 4): ")
         
         result = sniff(iface=self.config.iface, 
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 5066 )) ,
                          store=1, count=1,
                          timeout=1)
-        # print(result)
+        
         if len(result) > 0:
             print("成功捕获到 EAPOl Message 3 of 4")
         else:
