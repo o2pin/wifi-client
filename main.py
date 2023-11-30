@@ -77,23 +77,23 @@ def main():
     connectionphase_1 = ConnectionPhase(monitor, config.mac_client, config.mac_ap)
     
     # 链路认证
-    print("\n-------------------------\nLink Authentication Request : ")
+    logging.info("\n-------------------------\nLink Authentication Request : ")
     connectionphase_1.send_authentication()
     
     if connectionphase_1.state == "Authenticated":
-        print("STA is authenticated to the AP!")
+        logging.info("STA is authenticated to the AP!")
     else:
-        print("STA is NOT authenticated to the AP!")
+        logging.info("STA is NOT authenticated to the AP!")
         sys.exit(1)
     time.sleep(1)
     # 链路关联
-    print("\n-------------------------\nLink Assocation Request : ")
+    logging.info("\n-------------------------\nLink Assocation Request : ")
     connectionphase_1.send_assoc_request(ssid=config.ssid, rsn_info=rsn_info)
     
     if connectionphase_1.state == "Associated":
-        print("STA is connected to the AP!")
+        logging.info("STA is connected to the AP!")
     else:
-        print("STA is NOT connected to the AP!")
+        logging.info("STA is NOT connected to the AP!")
         sys.exit(1)
     
     # 密钥协商
@@ -101,13 +101,13 @@ def main():
     TK = connectionphase_2.run()
     
     if len(TK) > 1:
-        print("WiFi 握手完成!")
+        logging.info("WiFi 握手完成!")
     else:
         sys.exit(1)
     
     # 和 AP 加密通信
-    print("\n-------------------------\nSend Request : ")
-    print(" TK : ", TK)
+    logging.info("\n-------------------------\nSend Request : ")
+    logging.info(" TK : ", TK)
     # TK = ptk[32:48]
     PN = "000000000001"      # = Dot11CCMP(ext_iv=1, PN0=1) = Dot11CCMP(bytes.fromhex("0100002000000000"))
     qos = bytes.fromhex("00")       # 0 = tk , 1 = gtk
@@ -120,7 +120,7 @@ def main():
     
     cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, nonce, mac_len = 8)
     Ciphertext = cipher.encrypt(Plain_text)
-    print("密文 : ", Ciphertext)
+    logging.info("密文 : ", Ciphertext)
     
     
     dhcp_req = Dot11(

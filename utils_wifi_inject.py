@@ -110,12 +110,12 @@ class Monitor:
             self.bssid == seen_sender and \
                 self.sta_mac == seen_receiver:
             self.assoc_found = True
-            print("Detected Association Response from Source {0}".format(
+            logging.debug("Detected Association Response from Source {0}".format(
                 seen_bssid))
         return self.assoc_found
  
     def search_auth(self, mp_queue):
-        print("\nScanning max 1 seconds for Authentication "
+        logging.info("\nScanning max 1 seconds for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
               stop_filter=self.check_auth,
@@ -123,7 +123,7 @@ class Monitor:
         mp_queue.put(self.auth_found)
  
     def search_assoc_resp(self, mp_queue):
-        print("\nScanning max 1 seconds for Association Response "
+        logging.info("\nScanning max 1 seconds for Association Response "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11AssoResp),
               stop_filter=self.check_assoc,
