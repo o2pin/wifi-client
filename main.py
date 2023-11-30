@@ -12,10 +12,10 @@ def main():
     # Arguments.
     parser = argparse.ArgumentParser(description=f"{NAME} (Version {VERSION}).")
     parser.add_argument('--iface', type=str, default="wlan1", help="Interface.")
-    parser.add_argument('--ssid', type=str, default="shuimuyulin", help="Name of test to run.")
-    parser.add_argument('--psk', type=str, default="smyl2021x7s3", help="Config wifi psk.")
-    parser.add_argument('--ap-mac', type=str, default="58:41:20:FD:26:ED", help="Config ap mac.")
     parser.add_argument('--client-mac', type=str, default="00:1d:43:20:18:d4", help="Config ap mac.")
+    parser.add_argument('--ssid', type=str, default="shuimuyulin", help="Name of test to run.")
+    parser.add_argument('--ap-mac', type=str, default="58:41:20:FD:26:ED", help="Config ap mac.")
+    parser.add_argument('--psk', type=str, default="smyl2021x7s3", help="Config wifi psk.")
     parser.add_argument('--channel', type=str, default=None, help="Wlan Channel.")
     parser.add_argument('--debug', type=int, default=0, help="Debug output level.")
     opt = parser.parse_args()
