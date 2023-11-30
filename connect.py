@@ -66,6 +66,8 @@ class ConnectionPhase:
  
         for job in jobs:
             job.start()
+            # 需要先等待sniff监控上数据包, 否则多个进程的时序没有保证, 可能丢失Auth Response包？？
+            time.sleep(0.1)
         for job in jobs:
             job.join()
  
@@ -111,6 +113,8 @@ class ConnectionPhase:
  
         for job in jobs:
             job.start()
+            # 需要先等待sniff监控上数据包, 否则多个进程的时序没有保证, 可能丢失Assosi Response包？？
+            time.sleep(0.1)
         for job in jobs:
             job.join()
  

@@ -68,13 +68,14 @@ class Monitor:
         :return:
         """
         # Send out the packet
+        logging.info(f"Send package packet_type: {packet_type}")
         if packet_type is None:
             send(packet)
         elif packet_type == "AssoReq":
             packet /= self.dot11_rates
             send(packet)
         else:
-            print("Packet Type '{0}' unknown".format(packet_type))
+            logging.info("Packet Type '{0}' unknown".format(packet_type))
  
     def check_auth(self, packet):
         """
@@ -92,7 +93,7 @@ class Monitor:
             self.bssid == seen_sender and \
                 self.sta_mac == seen_receiver:
             self.auth_found = True
-            print("Detected Authentication from Source {0}".format(
+            logging.info("Detected Authentication from Source {0}".format(
                 seen_bssid))
         return self.auth_found
  
@@ -115,19 +116,17 @@ class Monitor:
         return self.assoc_found
  
     def search_auth(self, mp_queue):
-        logging.info("\nScanning max 1 seconds for Authentication "
+        logging.info("Scanning max 1 seconds for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
-              stop_filter=self.check_auth,
-              timeout=1)
+              stop_filter=self.check_auth, timeout=1, prn = lambda x: logging.debug(x))
         mp_queue.put(self.auth_found)
  
     def search_assoc_resp(self, mp_queue):
-        logging.info("\nScanning max 1 seconds for Association Response "
+        logging.info("Scanning max 1 seconds for Association Response "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11AssoResp),
-              stop_filter=self.check_assoc,
-              timeout=1)
+              stop_filter=self.check_assoc, timeout=1, prn = lambda x: logging.debug(x))
         mp_queue.put(self.assoc_found)
         
     

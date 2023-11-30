@@ -4,7 +4,7 @@ from connect import *
 from pprint import pprint
 from utils.interface_mode import *
 
-FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d %(message)s'
+FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 # Metadata.
@@ -77,7 +77,7 @@ def main():
     connectionphase_1 = ConnectionPhase(monitor, config.mac_client, config.mac_ap)
     
     # 链路认证
-    logging.info("\n-------------------------\nLink Authentication Request : ")
+    logging.info("\n-------------------------Link Authentication Request : ")
     connectionphase_1.send_authentication()
     
     if connectionphase_1.state == "Authenticated":
@@ -85,9 +85,8 @@ def main():
     else:
         logging.info("STA is NOT authenticated to the AP!")
         sys.exit(1)
-    time.sleep(1)
     # 链路关联
-    logging.info("\n-------------------------\nLink Assocation Request : ")
+    logging.info("\n-------------------------Link Assocation Request : ")
     connectionphase_1.send_assoc_request(ssid=config.ssid, rsn_info=rsn_info)
     
     if connectionphase_1.state == "Associated":
@@ -106,7 +105,7 @@ def main():
         sys.exit(1)
     
     # 和 AP 加密通信
-    logging.info("\n-------------------------\nSend Request : ")
+    logging.info("\n-------------------------Send Request : ")
     logging.info(" TK : ", TK)
     # TK = ptk[32:48]
     PN = "000000000001"      # = Dot11CCMP(ext_iv=1, PN0=1) = Dot11CCMP(bytes.fromhex("0100002000000000"))
