@@ -19,7 +19,7 @@ def ensure_interface_mode(iface):
         subprocess.check_output(["iw", iface, "interface", "add", nic_mon, "type", "monitor"])
 
     # 3. Enable monitor mode. This is similar to what airmon-ng does.
-    logging.info("Create iface:{} monitor mode", iface)
+    logging.info("Create iface:{} monitor mode".format(iface))
     set_monitor_mode(nic_mon)
     return nic_mon
 
