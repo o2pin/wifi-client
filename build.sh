@@ -1,7 +1,9 @@
 #!/bin/bash
-CURRENT=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
-PYTHON3=${PYTHON3:-python3}
+
 set -x
+CURRENT=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
+echo ${CURRENT}
+PYTHON3=${PYTHON3:-python3}
 if [ -n "${COMPONENT_PYTHON3_PYPI_MIRROR}" ]; then
     ${PYTHON3} -m pip install -i ${COMPONENT_PYTHON3_PYPI_MIRROR} -r ./requirements.txt 
     cd ${CURRENT}/submodule/socket_hook_py.git &&
