@@ -1,5 +1,10 @@
 #!/bin/bash
 
+不在项目中编译了(依赖有冲突？:clang版本)
+直接使用编译好的第三方库socket_hook_py-0.1.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl 
+# ${BASE_PATH}/wingfuzz-tool-protocol/build/build/components/python3/install/python/install/bin/python3 -m pip install maturin
+exit 0
+
 set -x
 CURRENT=$(cd $(dirname ${BASH_SOURCE[0]}) && pwd)
 echo ${CURRENT}

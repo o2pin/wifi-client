@@ -1,3 +1,0 @@
-[submodule "submodule/socket_hook_py.git"]
-	path = submodule/socket_hook_py.git
-	url = git@dev.shuimuyulin.com:contrib/socket_hook_py.git
