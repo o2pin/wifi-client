@@ -12,12 +12,14 @@ else
 fi 
 
 if [ -n "${COMPONENT_PYTHON3_PYPI_MIRROR}" ]; then
-    PYTHON3="${PYTHON3} -i ${COMPONENT_PYTHON3_PYPI_MIRROR}"
+    PIP3="${PYTHON3} -m pip -i ${COMPONENT_PYTHON3_PYPI_MIRROR}"
+else
+    PIP3="${PYTHON3} -m pip "
 fi
 
-${PYTHON3} -m pip install -r ./requirements.txt 
+${PIP3} install -r ./requirements.txt 
 cd ${CURRENT}/submodule/socket_hook_py.git &&
-    ${PYTHON3} -m pip install maturin && 
+    ${PIP3} install maturin && 
     rm ./tmp/* -rf &&
     ${MATURIN} build --release --out ./tmp &&
-    ${PYTHON3} -m pip install ./tmp/socket_hook_py-*
+    ${PIP3} install ./tmp/socket_hook_py-*
