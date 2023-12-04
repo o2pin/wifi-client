@@ -1,6 +1,7 @@
 import multiprocessing
 from scapy.all import *
- 
+
+from utils.bridge import *
 class Dot11EltRates(Packet):
     """
     Our own definition for the supported rates field
@@ -70,10 +71,17 @@ class Monitor:
         # Send out the packet
         logging.info(f"Send package packet_type: {packet_type}")
         if packet_type is None:
-            send(packet)
+            if is_hook:
+                my_send(send, packet)
+            else:
+                send(packet)
+
         elif packet_type == "AssoReq":
             packet /= self.dot11_rates
-            send(packet)
+            if is_hook:
+                my_send(send, packet)
+            else:
+                send(packet)
         else:
             logging.info("Packet Type '{0}' unknown".format(packet_type))
  
