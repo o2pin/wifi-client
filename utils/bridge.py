@@ -12,7 +12,7 @@ send = new_send
 # new sniff 当前预期适用于sniff仅接收一个回包
 def new_sniff(*args, **kargs):
     data = raw_sniff(*args, **kargs)
-    if data is not None:
+    if len(data) != 0:
         data = data[0]
         my_sniff(data)
     return data

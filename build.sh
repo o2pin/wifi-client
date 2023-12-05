@@ -3,7 +3,10 @@
 # 不在项目中编译了(依赖有冲突？:clang版本)
 # 直接使用编译好的第三方库socket_hook_py-0.1.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl 
 
-yum install clang
+# ./build-in-docker.sh --shell
+# cd build
+
+yum install -y clang
 git clone git@dev.shuimuyulin.com:contrib/socket_hook_py.git
 git clone git@dev.shuimuyulin.com:contrib/wifi-client.git
 
