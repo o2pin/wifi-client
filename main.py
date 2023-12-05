@@ -19,8 +19,7 @@ def main():
     parser.add_argument('--ssid', type=str, required=True, help="SSID.")
     parser.add_argument('--mac-ap', type=str, required=True, help="AP mac.")
     parser.add_argument('--psk', type=str, required=True, help="WIFI psk.")
-    # parser.add_argument('--channel', type=str, default=None, help="Wlan Channel.")
-    # parser.add_argument('--debug', type=int, default=0, help="Debug output level.")
+    parser.add_argument('--fuzz_scene', type=int, default=0, help="场景id.")
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
@@ -38,37 +37,6 @@ def main():
         payload = ("")
     )
     pprint(vars(config))
-    # smyl = WiFi_Object(
-    #     iface = "wlan0mon",
-    #     ssid = "shuimuyulin", 
-    #     psk = "smyl2021x7s3",       
-    #     mac_ap = "58:41:20:FD:26:ED",           # smyl
-    #     mac_client = "00:1d:43:20:18:d4",        # 00:1d:43:20:19:2d , mt7921au 第一块
-    #     anonce = "", 
-    #     snonce = "", 
-    #     payload = ("")
-    #     )
-    # smylguest = WiFi_Object(
-    #     iface = "wlan0mon",
-    #     ssid = "shuimuyulin-guest", 
-    #     psk = "smyl2021",       
-    #     mac_ap = "5a:41:20:1d:26:ed",           #
-    #     mac_client = "00:1d:43:20:19:2d",        # 00:1d:43:20:19:2d , mt7921au 第一块
-    #     anonce = "", 
-    #     snonce = "", 
-    #     payload = ("")
-    #     )
-    # xiaom_hotspot = WiFi_Object(
-    #     iface = "wlan0mon",
-    #     ssid = "testwifi", 
-    #     psk = "99999999",       
-    #     mac_ap = "F6:71:82:F6:32:19",           # xiaomi hotspot
-    #     mac_client = "00:1d:43:20:19:2d",        # mt7921au 第一块
-    #     # mac_client = "00:a1:b0:79:03:f6",        # rt3070 第一块
-    #     anonce = "", 
-    #     snonce = "", 
-    #     payload = ("")
-    #     )
     
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()       # rsn info
@@ -85,6 +53,10 @@ def main():
     else:
         logging.info("STA is NOT authenticated to the AP!")
         sys.exit(1)
+    # 场景0 测试认证过程
+    if opt.fuzz_scene == 0:
+        sys.exit(0)
+
     # 链路关联
     logging.info("\n-------------------------Link Assocation Request : ")
     connectionphase_1.send_assoc_request(ssid=config.ssid, rsn_info=rsn_info)
@@ -94,6 +66,9 @@ def main():
     else:
         logging.info("STA is NOT connected to the AP!")
         sys.exit(1)
+    # 场景1 测试关联过程
+    if opt.fuzz_scene == 1:
+        sys.exit(0)
     
     # 密钥协商
     connectionphase_2 = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
@@ -103,6 +78,9 @@ def main():
         logging.info("WiFi 握手完成!")
     else:
         sys.exit(1)
+    # 场景2 测试密钥协商
+    if opt.fuzz_scene == 2:
+        sys.exit(0)
     
     # 和 AP 加密通信
     logging.info("\n-------------------------Send Request : ")
