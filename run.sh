@@ -9,6 +9,4 @@
 # sudo airmon-ng check kill
 
 # 链路认证 密钥协商
-# sudo ~/.python3/bin/python3 wpa_fuzz/main.py wlan0mon --client-mac 00:1d:43:20:18:d4 --ssid shuimuyulin-guest --psk smyl2020 --ap-mac "5A:41:20:1D:26:ED"
-
-sudo ~/.python3/bin/python3 ./main.py wlan0mon
+sudo ~/.python3/bin/python3 wpa_fuzz/main.py --iface wlan0mon --ssid shuimuyulin-guest --psk smyl2020 --ap-mac "5A:41:20:1D:26:ED"

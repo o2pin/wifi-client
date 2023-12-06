@@ -7,7 +7,7 @@ from scapy.layers.dot11 import Dot11
 def new_send(x: Dot11, iface=None, **kargs):
     subtype = x[Dot11].subtype
     type_ = x[Dot11].type
-    fcfield = x[Dot11].fcfield
+    fcfield = x[Dot11].FCfield
     id = x[Dot11].ID
     addr1 = x[Dot11].addr1
     addr2 = x[Dot11].addr2
