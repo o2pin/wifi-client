@@ -1,6 +1,6 @@
 import argparse
 import logging
-from connect import *
+from src.connect import *
 from pprint import pprint
 from utils.interface_mode import *
 
