@@ -1,10 +1,23 @@
 from scapy.all import *
 
 from socket_hook_py import *
+from scapy.layers.dot11 import Dot11
 
 # new_send
-def new_send(x, iface=None, **kargs):
-    my_send(raw_send, x, iface=iface, **kargs)
+def new_send(x: Dot11, iface=None, **kargs):
+    subtype = x[Dot11].subtype
+    type_ = x[Dot11].type
+    fcfield = x[Dot11].fcfield
+    id = x[Dot11].ID
+    addr1 = x[Dot11].addr1
+    addr2 = x[Dot11].addr2
+    addr3 = x[Dot11].addr3
+    sc = x[Dot11].SC
+    def correct_addr1_send(x: Dot11, iface=None, **kargs):
+        x[Dot11].addr1 = addr1
+        raw_send(x, iface=None, **kargs)
+
+    my_send(correct_addr1_send, x, iface=iface, **kargs)
 
 raw_send = send
 send = new_send
