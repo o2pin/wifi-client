@@ -219,7 +219,7 @@ class SAEHandshake():
         self.element = ECC.EccPoint(temp.x, Integer(secp256r1_p) - temp.y)
 
         auth = build_sae_commit(self.srcaddr, self.dstaddr, self.scalar, self.element)
-        t1 = AsyncSniffer(iface=iface, lfilter=lambda x: x[Dot11].addr1==srcaddr and x.getlayer(Dot11Auth).seqnum == 1)
+        t1 = AsyncSniffer(iface=iface, lfilter=lambda x: x[Dot11].addr1==self.srcaddr and x.getlayer(Dot11Auth).seqnum == 1)
         t1.start()
         time.sleep(0.2)
         sendp(RadioTap() / auth ,iface=iface)
