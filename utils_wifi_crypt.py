@@ -6,6 +6,7 @@ import binascii
 import hashlib, hmac
 from Crypto.Cipher import AES
 from cryptography.hazmat.primitives.keywrap import aes_key_unwrap, aes_key_wrap
+import pyaes
 
 
 class Calc_MIC():
@@ -123,7 +124,7 @@ class Generate_Plain_text():
                             options=b'63825363', 
                             # options=[message-type=request client_id='\x01\x00\x1dC \x19-' requested_addr=192.168.4.119 hostname=b'bichenshao-pc' client_FQDN=b'\x00\x00\x00bichenshao-pc' vendor_class_id='MSFT 5.0' param_req_list=[1, 3, 6, 15, 31, 33, 43, 44, 46, 47, 119, 121, 249, 252] end ........]
                             )
-            print(TK , nonce.hex())
+            # print(TK , nonce.hex())
             ip = IP(dst="255.255.255.255", src = "0.0.0.0")
             udp = UDP(sport = 68, dport = 67)
             
@@ -134,3 +135,92 @@ class Generate_Plain_text():
         else:
             print("Wrong type ")
         return Plain_text
+    
+ 
+
+class CCMPCrypto:
+    # @staticmethod
+    # def ccmp_get_nonce(packet):
+    #     PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
+    #     print("PN : ",PN)
+    #     # Priority Octet "00" 
+    #     nonce = bytes.fromhex("00") + bytes.fromhex(packet[Dot11].addr2) + bytes.fromhex(PN)  
+        
+    #     return nonce
+    @staticmethod
+    def ccmp_get_nonce(priority, addr, pn):
+        """
+        CCMP nonce = 1 byte priority, 6 byte sender addr, 6 byte PN.
+        """
+        nonce = bytes.fromhex(priority) + bytes.fromhex((addr).replace(":", "")) + bytes.fromhex(pn)
+    
+        return nonce
+    
+    @staticmethod
+    def ccmp_get_aad(p, amsdu_spp=False):
+        # 要求p是一个Dot11包
+        # FC field with masked values
+        fc = raw(p)[:2]
+        fc = bytes([fc[0] & 0x8F, fc[1] & 0xC7])
+
+        # Sequence number is masked, but fragment number is included
+        sc = struct.pack("<H", p.SC & 0xF)
+
+        addr1 = bytes.fromhex((p.addr1).replace(":", ""))
+        addr2 = bytes.fromhex((p.addr2).replace(":", ""))
+        addr3 = bytes.fromhex((p.addr3).replace(":", ""))
+        aad = fc + addr1 + addr2 + addr3 + sc
+
+        if Dot11QoS in p:
+            if not amsdu_spp:
+                # Everything except the TID is masked
+                aad += struct.pack("<H", p[Dot11QoS].TID)
+            else:
+                # TODO: Mask unrelated fields
+                aad += bytes(raw(p[Dot11QoS])[:2])
+
+        return aad
+    
+    @staticmethod
+    def cbc_mac(key, plaintext, aad, nonce, iv=b"\x00" * 16, mac_len=8):
+        '''
+        # 使用方法举例
+        # MIC = CCMPCrypto.cbc_mac(tk, plaintext, aad, nonce)
+        # plaintext 结构举例 LLC / SNAP / ARP
+        '''
+        assert len(key) == len(iv) == 16  # aes-128
+        assert len(nonce) == 13
+        iv = int.from_bytes(iv, byteorder="big")
+        assert len(aad) < (2**16 - 2**8)
+
+        q = L = 2
+        Mp = (mac_len - 2) // 2
+        assert q == L
+        has_aad = len(aad) > 0
+        flags = 64 * has_aad + 8 * Mp + (q - 1)
+        b_0 = bytes([flags]) + nonce + len(plaintext).to_bytes(2, byteorder='big')
+        assert len(b_0) == 16
+
+        a = len(aad).to_bytes(2, byteorder='big') + aad
+        if len(a) % 16 != 0:
+            a += b"\x00" * (16 - len(a) % 16)
+        blocks = b_0 + a
+        blocks += plaintext
+
+        if len(blocks) % 16 != 0:
+            blocks += b"\x00" * (16 - len(blocks) % 16)
+
+        encrypt = pyaes.AESModeOfOperationECB(key).encrypt
+        prev = iv
+        for i in range(0, len(blocks), 16):
+            inblock = int.from_bytes(blocks[i : i + 16], byteorder="big")
+            outblock = encrypt(int.to_bytes(inblock ^ prev, length=16, byteorder="big"))
+            prev = int.from_bytes(outblock, byteorder="big")
+
+        xn = bytes([q - 1]) + nonce + b"\x00" * L
+        ctr_nonce = int.from_bytes(xn, byteorder="big")
+        xctr = pyaes.AESModeOfOperationCTR(key, counter=pyaes.Counter(ctr_nonce)).encrypt
+        xs0 = xctr(b"\x00" * 16)
+        s_0 = int.from_bytes(xs0, byteorder="big")
+
+        return int.to_bytes(s_0 ^ prev, length=16, byteorder="big")[:mac_len]
