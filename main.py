@@ -3,6 +3,7 @@ import logging
 from src.connect import *
 from pprint import pprint
 from utils.interface_mode import *
+from utils_wifi_crypt import CCMPCrypto
 
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
@@ -85,30 +86,40 @@ def main():
     # 和 AP 加密通信
     logging.info("\n-------------------------Send Request : ")
     logging.info(" TK : ".format(TK))
-    # TK = ptk[32:48]
-    PN = "000000000001"      # = Dot11CCMP(ext_iv=1, PN0=1) = Dot11CCMP(bytes.fromhex("0100002000000000"))
-    qos = bytes.fromhex("00")       # 0 = tk , 1 = gtk
-    nonce = qos + bytes.fromhex(config.mac_client.replace(":", "")) + bytes.fromhex(PN)
     
-    generate_payload = Generate_Plain_text()
-    Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp
-    Plain_text.show()
-    Plain_text = bytes(Plain_text)
     
-    cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, nonce, mac_len = 8)
-    Ciphertext = cipher.encrypt(Plain_text)
-    logging.info("密文 : {}".format(Ciphertext))
     
-    dhcp_req = Dot11(
+    dot11_packet = Dot11(
             type=2, 
             subtype=8,   
             FCfield=65,
             addr1=config.mac_ap,
             addr2=config.mac_client, 
             addr3=config.ff_mac, 
-            SC=64)  / Dot11QoS() / Dot11CCMP(ext_iv=1, PN0=1) / Ciphertext
-    dhcp_req.display()
-    send(dhcp_req, iface = config.iface)
+            SC=64)  / Dot11QoS() / Dot11CCMP(ext_iv=1, PN0=1)
+    
+    packet = dot11_packet
+    PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
+    qos_priority = "00"       # 0 = tk , 1 = gtk
+    Nonce = CCMPCrypto.ccmp_get_nonce(priority=qos_priority , addr=config.mac_client, pn=PN)
+    
+    generate_payload = Generate_Plain_text()
+    Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp
+    Plain_text.show()
+    Plain_text = bytes(Plain_text)
+    
+    cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, Nonce, mac_len = 8)
+    Ciphertext = cipher.encrypt(Plain_text)
+    logging.info("密文 : {}".format(Ciphertext))
+    
+    
+    
+    AAD = CCMPCrypto.ccmp_get_aad(p=dot11_packet)
+    MIC = CCMPCrypto.cbc_mac(key = TK, plaintext=Plain_text,aad=AAD,nonce=Nonce)    # 密文mic
+    
+    encrypt_req = dot11_p / Ciphertext / Raw(MIC)
+    encrypt_req.display()
+    send(encrypt_req, iface = config.iface)
     
 if __name__ == "__main__":
     sys.exit(main())

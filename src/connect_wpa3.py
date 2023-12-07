@@ -2,7 +2,6 @@
 # TODO: Program unit tests so we can easily keep our EAP-pwd code correct
 #!/usr/bin/env python3
 from scapy.all import *
-import pcapy
 from scapy.contrib.wpa_eapol import *
 from src.libwifi import *
 import sys, struct, math, random, select, time, binascii
@@ -230,9 +229,9 @@ class SAEHandshake():
         return result
 
     def process_commit(self, p):
-        self.peer_scalar = int.from_bytes(p.scalar)
-        peer_element_x = int.from_bytes(p.ffe[:32])
-        peer_element_y = int.from_bytes(p.ffe[32:])
+        self.peer_scalar = int.from_bytes(p.scalar, byteorder='big')
+        peer_element_x = int.from_bytes(p.ffe[:32], byteorder='big')
+        peer_element_y = int.from_bytes(p.ffe[32:], byteorder='big')
         self.peer_element = ECC.EccPoint(peer_element_x, peer_element_y)
 
         k = ((self.pwe * self.peer_scalar + self.peer_element) * self.rand).x
@@ -472,7 +471,7 @@ password = "passphrase"
 srcaddr = "02:00:00:00:01:00"
 dstaddr = "02:00:00:00:00:00"
 ssid = "testnetwork"
-iface = "monwlan2"
+iface = "monwlan1"
 
 sae = SAEHandshake(password=password,srcaddr=srcaddr,dstaddr=dstaddr)
 
