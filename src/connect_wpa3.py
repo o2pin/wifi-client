@@ -3,7 +3,7 @@
 #!/usr/bin/env python3
 from scapy.all import *
 from scapy.contrib.wpa_eapol import *
-from src.libwifi import *
+from libwifi import *
 import sys, struct, math, random, select, time, binascii
 
 from Crypto.Hash import HMAC, SHA256
@@ -13,7 +13,7 @@ from Crypto.Math.Numbers import Integer
 # Alternative is https://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python
 from sympy.ntheory.residue_ntheory import sqrt_mod_iter
 
-from src.utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
 
 # ----------------------- Utility ---------------------------------
 
