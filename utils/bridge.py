@@ -5,16 +5,17 @@ from scapy.layers.dot11 import Dot11
 
 # new_send
 def new_send(x: Dot11, iface=None, **kargs):
-    subtype = x[Dot11].subtype
-    type_ = x[Dot11].type
-    fcfield = x[Dot11].FCfield
-    id = x[Dot11].ID
-    addr1 = x[Dot11].addr1
-    addr2 = x[Dot11].addr2
-    addr3 = x[Dot11].addr3
-    sc = x[Dot11].SC
+    # subtype = x[Dot11].subtype
+    # type_ = x[Dot11].type
+    # fcfield = x[Dot11].FCfield
+    # id = x[Dot11].ID
+    # addr1 = x[Dot11].addr1
+    # addr2 = x[Dot11].addr2
+    # addr3 = x[Dot11].addr3
+    # sc = x[Dot11].SC
     def correct_addr1_send(x: Dot11, iface=None, **kargs):
-        x[Dot11].addr1 = addr1
+        # 不修改变异后的的数据包, 修改会导致保存的和实际发送的不一致, 复现会有问题
+        # x[Dot11].addr1 = addr1
         raw_send(x, iface=None, **kargs)
 
     my_send(correct_addr1_send, x, iface=iface, **kargs)

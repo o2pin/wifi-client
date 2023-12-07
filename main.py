@@ -3,7 +3,8 @@ import logging
 from src.connect import *
 from pprint import pprint
 from utils.interface_mode import *
-from utils_wifi_crypt import CCMPCrypto
+from src.utils_wifi_crypt import CCMPCrypto
+from src import connect_wpa3 as wpa3
 
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
@@ -21,9 +22,12 @@ def main():
     parser.add_argument('--mac-ap', type=str, required=True, help="AP mac.")
     parser.add_argument('--psk', type=str, required=True, help="WIFI psk.")
     parser.add_argument('--fuzz_scene', type=int, default=0, help="场景id.")
+    parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
+    if opt.suite == "WPA3":
+        wpa3.test()
 
     iface = ensure_interface_mode(opt.iface)
     mac_client = opt.mac_client if opt.mac_client else get_iface_mac(iface)

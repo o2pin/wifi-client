@@ -3,7 +3,7 @@
 #!/usr/bin/env python3
 from scapy.all import *
 from scapy.contrib.wpa_eapol import *
-from libwifi import *
+from .libwifi import *
 import sys, struct, math, random, select, time, binascii
 
 from Crypto.Hash import HMAC, SHA256
@@ -13,7 +13,7 @@ from Crypto.Math.Numbers import Integer
 # Alternative is https://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python
 from sympy.ntheory.residue_ntheory import sqrt_mod_iter
 
-from utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from .utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
 
 # ----------------------- Utility ---------------------------------
 
@@ -466,55 +466,58 @@ class eapol_handshake():
     
 
 # ----------------------- Fuzzing/Testing ---------------------------------
+def test(
+    password = "passphrase",
+    srcaddr = "02:00:00:00:01:00",
+    dstaddr = "02:00:00:00:00:00",
+    ssid = "testnetwork",
+    iface = "monwlan1",
+):
+    sae = SAEHandshake(password=password,srcaddr=srcaddr,dstaddr=dstaddr)
 
-password = "passphrase"
-srcaddr = "02:00:00:00:01:00"
-dstaddr = "02:00:00:00:00:00"
-ssid = "testnetwork"
-iface = "monwlan1"
-
-sae = SAEHandshake(password=password,srcaddr=srcaddr,dstaddr=dstaddr)
-
-commit_2 = sae.send_commit(iface)
-dot11_sae = SAE(commit_2[Dot11Auth].payload.original)
-# dot11_sae.show()
-kck, pmk = sae.process_commit(dot11_sae)
-print("KCK", kck.hex())
-print("PMK", pmk.hex())
-sae.send_confirm(iface=iface)
-
-
-rsn = RSN()
-rsn_info = rsn.get_rsn_info()
-packet = Dot11(
-            addr1=dstaddr,
-            addr2=srcaddr,
-            addr3=dstaddr,
-            SC=16)
-packet /= Dot11AssoReq(
-                        cap='short-slot+ESS+privacy', 
-                        listen_interval=0x0001)
-packet /= Dot11Elt(ID=0, info="{}".format(ssid))
-packet /=  rsn_info
-rate = bytes.fromhex("010882848b960c121824")
-packet /= Raw(rate)
-assocation_1 = RadioTap() / packet
-
-sendp(assocation_1, iface=iface)
-# 密钥协商
-config = WiFi_Object(
-        iface = iface,
-        ssid = ssid, 
-        psk = password,       
-        mac_ap = dstaddr,
-        mac_client = srcaddr,
-        anonce = "", 
-        snonce = "", 
-        payload = (""),
-        kck = kck,
-        pmk = pmk
-    )
+    commit_2 = sae.send_commit(iface)
+    dot11_sae = SAE(commit_2[Dot11Auth].payload.original)
+    # dot11_sae.show()
+    kck, pmk = sae.process_commit(dot11_sae)
+    print("KCK", kck.hex())
+    print("PMK", pmk.hex())
+    sae.send_confirm(iface=iface)
 
 
-EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
-ptk = EAPOL_connect.run()
+    rsn = RSN()
+    rsn_info = rsn.get_rsn_info()
+    packet = Dot11(
+                addr1=dstaddr,
+                addr2=srcaddr,
+                addr3=dstaddr,
+                SC=16)
+    packet /= Dot11AssoReq(
+                            cap='short-slot+ESS+privacy', 
+                            listen_interval=0x0001)
+    packet /= Dot11Elt(ID=0, info="{}".format(ssid))
+    packet /=  rsn_info
+    rate = bytes.fromhex("010882848b960c121824")
+    packet /= Raw(rate)
+    assocation_1 = RadioTap() / packet
+
+    sendp(assocation_1, iface=iface)
+    # 密钥协商
+    config = WiFi_Object(
+            iface = iface,
+            ssid = ssid, 
+            psk = password,       
+            mac_ap = dstaddr,
+            mac_client = srcaddr,
+            anonce = "", 
+            snonce = "", 
+            payload = (""),
+            kck = kck,
+            pmk = pmk
+        )
+
+
+    EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
+    ptk = EAPOL_connect.run()
+
+if __name__ == "__main__":
+    test()

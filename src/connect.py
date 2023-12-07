@@ -6,8 +6,8 @@ import binascii
 import hashlib, hmac, sys, struct
 from Crypto.Cipher import AES
 
-from src.utils_wifi_inject import Monitor, RSN
-from src.utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from .utils_wifi_inject import Monitor, RSN
+from .utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic=""):
