@@ -25,7 +25,7 @@ class SAE(Packet):
         StrFixedLenField("scalar", "", 32),
         StrFixedLenField("ffe", "", 64)
     ]
-    
+
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic="", kck=b"", pmk=b""):
@@ -43,9 +43,9 @@ class WiFi_Object:
         self.pmk:bytes = pmk
         self.ptk:str = "0" * 40
         self.encrypt_msg:bytes = "0" * 56
-        
-        
-        
+
+
+
 def int_to_data(num):
     return binascii.unhexlify("%064x" % num)
 
@@ -179,13 +179,13 @@ def build_sae_commit(srcaddr, dstaddr, scalar, element, token=""):
     element_blob = bytes.fromhex("%064x" % element.x) + bytes.fromhex("%064x" % element.y)
 
     return p/Raw(struct.pack("<H", group_id) + bytes.fromhex(token) + scalar_blob + element_blob)
-    
+
 
 def build_sae_confirm(srcaddr, dstaddr, send_confirm, confirm):
     p = Dot11(addr1=dstaddr, addr2=srcaddr, addr3=dstaddr)
     p = p/Dot11Auth(algo=3, seqnum=2, status=0)
 
-    return p/Raw(struct.pack("<H", send_confirm) + confirm)	
+    return p/Raw(struct.pack("<H", send_confirm) + confirm)
 
 
 class SAEHandshake():
@@ -225,7 +225,7 @@ class SAEHandshake():
         sendp(RadioTap() / auth ,iface=iface)
         time.sleep(0.1)
         result = t1.stop()[0]
-        
+
         return result
 
     def process_commit(self, p):
@@ -243,7 +243,7 @@ class SAEHandshake():
         self.pmk = kck_and_pmk[32:]
         # print("KCK : ", self.kck)
         # print("PMK : ", self.pmk)
-        
+
         return self.kck, self.pmk
 
     def send_confirm(self, iface):
@@ -344,25 +344,25 @@ class RSN():
                 akm_suites=[AKMSuite(suite=8)], # 重要, =8 代表 SAE
                 mfp_required=0 ,    # 管理帧保护要求，=1 or =0, 受保护的管理帧强制对断开连接帧进行加密
                 mfp_capable=1,    # 管理帧保护能力, =1 or =0
-                gtksa_replay_counter=0 ,      
+                gtksa_replay_counter=0 ,
                 ptksa_replay_counter=0,
                 # group_management_cipher_suite=0x000fac06   # 因为len=26，自动带入group 参数
                 )
-        
+
         return rsn_info
-    
+
 class eapol_handshake():
     def __init__(self, DUT_Object, rsn_info):
         self.config = DUT_Object
-        self.eapol_3_found = False    
+        self.eapol_3_found = False
         self.rsn_info = rsn_info
-    
+
     def run(self):
         # Key (Message 1 of 4)
         logging.info("\n-------------------------Key (Message 1 of 4): ")
         # 遗留问题：可能捕获到别人协商过程的eapol包
-        eapol_p1 = sniff(iface=self.config.iface, 
-                         lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x0088)) , 
+        eapol_p1 = sniff(iface=self.config.iface,
+                         lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x0088)) ,
                          count=1, store=1, timeout=2, prn = lambda x: logging.debug(x))
         if len(eapol_p1) > 0:
             logging.info("成功捕获到 EAPOL Message 1 of 4 ")
@@ -371,7 +371,7 @@ class eapol_handshake():
             sys.exit(1)
         # # 提取 802.11 层 sequence
         # dot11_seq = eapol_p1[0].payload.SC
-        # eapol_1_layer = eapol_p1[0].payload.payload.payload.payload   
+        # eapol_1_layer = eapol_p1[0].payload.payload.payload.payload
         # RadioTap / Dot11 / LLC / SNAP / EAPOL EAPOL-Key + **Raw**
         eapol_1_packet = eapol_p1[0][EAPOL]
         replay_counter = eapol_1_packet[WPA_key].replay_counter
@@ -379,7 +379,7 @@ class eapol_handshake():
         self.config.anonce = eapol_1_packet[WPA_key].nonce
         print("Anonce : ", (self.config.anonce).hex())
         logging.debug("ANonce {}".format((self.config.anonce).hex()))
-        
+
         # Key (Message 2 of 4)
         logging.debug("-------------------------Key (Message 2 of 4): ")
         # 计算 MIC
@@ -390,7 +390,7 @@ class eapol_handshake():
                         replay_counter=replay_counter,     # 和key 1 匹配, 用于匹配发送的每对消息，ap 每次重传它的包都会递增counter。
                         nonce=self.config.snonce,
                         wpa_key_length = 28,        # rsn_info 增加了group manag cipher suite
-                        wpa_key=self.rsn_info) 
+                        wpa_key=self.rsn_info)
         print("eapol_2_blank : ", bytes(eapol_2).hex())
         self.config.payload = bytes(eapol_2)
 
@@ -398,27 +398,27 @@ class eapol_handshake():
         self.config.ptk, self.config.mic = calc_mic.run(self.config)
         print(self.config.mic)
         eapol_2[WPA_key].wpa_key_mic = bytes.fromhex(self.config.mic)
-        
+
         eapol_2_packet = RadioTap() / Dot11(
-                                type=2, 
-                                subtype=8, 
-                                FCfield=1, 
+                                type=2,
+                                subtype=8,
+                                FCfield=1,
                                 addr1=self.config.mac_ap,
-                                addr2=self.config.mac_client, 
-                                addr3=self.config.mac_ap, 
+                                addr2=self.config.mac_client,
+                                addr3=self.config.mac_ap,
                                 SC=32 )  / Dot11QoS() / LLC() / SNAP() / eapol_2
         # eapol_2_packet.show()
         conf.use_pcap = True
         sendp(eapol_2_packet, iface = self.config.iface)
-        
+
         # Key (Message 3 of 4)
         logging.debug("\n-------------------------Key (Message 3 of 4): ")
-        
-        result = sniff(iface=self.config.iface, 
+
+        result = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x13c8 )) ,
                          store=1, count=1,
                          timeout=1)
-        
+
         if len(result) > 0:
             print("成功捕获到 EAPOl Message 3 of 4")
         else:
@@ -429,19 +429,19 @@ class eapol_handshake():
         self.config.encrypt_msg = eapol_3_packet[WPA_key].wpa_key
         replay_counter = eapol_3_packet[WPA_key].replay_counter
         print("Encrypt Msg : ", self.config.encrypt_msg)
-        
+
         # 解密出 gtk
         # gtk_decrypt = GTKDecrypt(self.config)
         # gtk , tk = gtk_decrypt.get_gtk()
         # print("GTK : ", gtk)
         # print("TK : ", tk)
-        
+
         # Key (Message 4 of 4)
         print("\n-------------------------\nKey (Message 4 of 4): ")
-        eapol_4 = EAPOL(version=1, 
-                        type=3, 
-                        len =95) / WPA_key(descriptor_type=2, 
-                                    key_info=0x0308, 
+        eapol_4 = EAPOL(version=1,
+                        type=3,
+                        len =95) / WPA_key(descriptor_type=2,
+                                    key_info=0x0308,
                                     replay_counter = replay_counter # 和key 3 匹配, 用于匹配发送的每对消息。
                                     )
         self.config.payload = bytes(eapol_4)
@@ -451,29 +451,30 @@ class eapol_handshake():
         # print(MIC_2)
         eapol_4[WPA_key].wpa_key_mic = bytes.fromhex(MIC_2)
         eapol_4_packet = RadioTap() / Dot11(
-            type=2, 
-            subtype=8,   
-            FCfield=1,      
+            type=2,
+            subtype=8,
+            FCfield=1,
             addr1=self.config.mac_ap,
-            addr2=self.config.mac_client, 
-            addr3=self.config.mac_ap, 
+            addr2=self.config.mac_client,
+            addr3=self.config.mac_ap,
             SC=48)  / Dot11QoS() / LLC() / SNAP() / eapol_4
         # eapol_4_packet.show()
         sendp(eapol_4_packet, iface = self.config.iface)
-    
+
         return ptk
-    
-    
+
+
 
 # ----------------------- Fuzzing/Testing ---------------------------------
 def test(
-    password = "passphrase",
-    srcaddr = "02:00:00:00:01:00",
-    dstaddr = "02:00:00:00:00:00",
-    ssid = "testnetwork",
     iface = "monwlan1",
+    ssid = "testnetwork",
+    psk = "passphrase",
+    ap_mac = "02:00:00:00:00:00",
+    client_mac = "02:00:00:00:01:00",
+    scene = 2,
 ):
-    sae = SAEHandshake(password=password,srcaddr=srcaddr,dstaddr=dstaddr)
+    sae = SAEHandshake(password=psk,srcaddr=client_mac,dstaddr=ap_mac)
 
     commit_2 = sae.send_commit(iface)
     dot11_sae = SAE(commit_2[Dot11Auth].payload.original)
@@ -487,12 +488,12 @@ def test(
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()
     packet = Dot11(
-                addr1=dstaddr,
-                addr2=srcaddr,
-                addr3=dstaddr,
+                addr1=ap_mac,
+                addr2=client_mac,
+                addr3=ap_mac,
                 SC=16)
     packet /= Dot11AssoReq(
-                            cap='short-slot+ESS+privacy', 
+                            cap='short-slot+ESS+privacy',
                             listen_interval=0x0001)
     packet /= Dot11Elt(ID=0, info="{}".format(ssid))
     packet /=  rsn_info
@@ -504,12 +505,12 @@ def test(
     # 密钥协商
     config = WiFi_Object(
             iface = iface,
-            ssid = ssid, 
-            psk = password,       
-            mac_ap = dstaddr,
-            mac_client = srcaddr,
-            anonce = "", 
-            snonce = "", 
+            ssid = ssid,
+            psk = psk,
+            mac_ap = ap_mac,
+            mac_client = client_mac,
+            anonce = "",
+            snonce = "",
             payload = (""),
             kck = kck,
             pmk = pmk
