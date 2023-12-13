@@ -15,6 +15,7 @@ from Crypto.Math.Numbers import Integer
 from sympy.ntheory.residue_ntheory import sqrt_mod_iter
 
 from .utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
+from .utils_wifi_inject import Dot11EltRates
 
 # ----------------------- Utility ---------------------------------
 
@@ -76,8 +77,11 @@ def HMAC256(pw, data):
 # ----------------------- Elliptic Curve Operations ---------------------------------
 
 # This is group 19. Support of it is required by WPA3.
+# “secp256r1”是SECG（高效密码学组织标准）选择和推荐的特定椭圆曲线和相关域参数。请参阅 https://www.secg.org/sec2-v2.pdf 上的“SEC 2：推荐的椭圆曲线域参数”。
 secp256r1_p = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
+# 115792089210356248762697446949407573530086143415290314195533631308867097853951
 secp256r1_r = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+# 115792089210356248762697446949407573529996955224135760342422259061068512044369
 
 def legendre_symbol(a, p):
     """Compute the Legendre symbol."""
@@ -361,7 +365,6 @@ class eapol_handshake():
     def run(self):
         # Key (Message 1 of 4)
         logging.info("\n-------------------------Key (Message 1 of 4): ")
-        # 遗留问题：可能捕获到别人协商过程的eapol包
         eapol_p1 = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x0088)) ,
                          count=1, store=1, timeout=2, prn = lambda x: logging.debug(x))
@@ -431,7 +434,7 @@ class eapol_handshake():
         replay_counter = eapol_3_packet[WPA_key].replay_counter
         print("Encrypt Msg : ", self.config.encrypt_msg.hex())
 
-        # 解密出 gtk , 和 WPA2 不同
+        # 解密出 gtk , 需要修改
         # try:
         #     gtk_decrypt = GTKDecrypt(self.config)
         #     gtk , tk = gtk_decrypt.get_gtk()
@@ -502,11 +505,12 @@ def test(
                             listen_interval=0x0001)
     packet /= Dot11Elt(ID=0, info="{}".format(ssid))
     packet /=  rsn_info
-    rate = bytes.fromhex("010882848b960c121824")
-    packet /= Raw(rate)
+    # rate = bytes.fromhex("010882848b960c121824")
+    rate = Dot11EltRates()
+    packet /= rate
     assocation_1 = RadioTap() / packet
 
-    # sniff 关联响应
+    # sniff 关联响应 association response
     # t1 = AsyncSniffer(iface=config.iface, lfilter=lambda x: x[Dot11].addr1==config.mac_client and x.getlayer(Dot11AssoResp).seqnum == 1)
     # t1.start()
     # time.sleep(0.2)

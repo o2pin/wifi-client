@@ -71,7 +71,7 @@ class Calc_MIC():
         # print("KCK:",PTK[0:32])
         # print("KEK:",PTK[32:64])
         # print("TK :",PTK[64:96])
-        MIC = self.calculate_WPA3_MIC(ptk, config.payload)
+        MIC = self.calculate_WPA3_MIC(PTK, config.payload)
 
         return PTK, MIC
 
