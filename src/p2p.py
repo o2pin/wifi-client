@@ -1,0 +1,146 @@
+import os
+import random
+import re
+import subprocess
+import time
+# import scapy.layers.dot11 as scapy_dot11
+from scapy.layers.dot11 import Dot11EltVendorSpecific as scapy_Dot11EltVendorSpecific
+from scapy.sendrecv import sendp, sniff
+from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
+
+from .libwifi import ETHER_BROADCAST
+from .dot11p2p import DeviceName, Dot11EltWiFiAllianceP2P, ListenChannelAttribute, P2PAttribute, P2PCapabilityAttribute, P2PDeviceInfoAttribute, PrimaryDeviceTypeData
+from .dot11wps import AssociationStateAttribute, ConfigurationErrorAttribute, ConfigurationMethodsAttribute, DeviceNameAttribute, DevicePasswordIDAttribute, Dot11EltWPS, ManufacturerAttribute, ModelNameAttribute, ModelNumberAttribute, PrimaryDeviceTypeAttribute, RFBandsAttribute, RequestTypeAttribute, ResponseTypeAttribute, SerialNumberAttribute, UUIDEAttribute, VersionAttribute, WiFiSimpleConfigurationStateAttribute, WPSAttribute
+
+def get_iface_mac(iface):
+	output = str(subprocess.check_output(["iw", iface, "info"]))
+	p = re.compile("addr ([\w:]+)")
+	return str(p.search(output).group(1))
+
+def build_p2p_probe_request(iface, channel=1, sn=0, dst=ETHER_BROADCAST, listen_channel=11):
+    dot11 = Dot11(type=0, subtype=4, addr1=dst, addr2=get_iface_mac(iface), addr3=ETHER_BROADCAST, SC=sn*16)
+    elt_rates = Dot11EltRates(rates=[0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c])
+    pkt = dot11 / Dot11ProbeReq() / Dot11Elt(ID=0, info="{}".format("DIRECT-")) / elt_rates
+    pkt /= Dot11EltDSSSet(ID=3,channel=channel)
+    pkt /= Dot11EltHTCapabilities(Max_A_MSDU=1, Rx_STBC=1,Tx_STBC=1,Short_GI_40Mhz=1,Short_GI_20Mhz=1,
+                                  SM_Power_Save=0x3,Supported_Channel_Width=1,Min_MPDCU_Start_Spacing=0x5,Max_A_MPDU_Length_Exponent=0x3,
+                                  RX_MSC_Bitmask=0xF0,Compressed_Steering_n_Beamformer_Antennas_Supported=0x2)
+
+
+    pkt /= Dot11EltWPS(len=103)
+    pkt /= VersionAttribute(id=0x104a, Version=0x10)
+    pkt /= RequestTypeAttribute(id=0x103A, RequestType=0x01)
+    pkt /= ConfigurationMethodsAttribute(id=0x1008, ConfigurationMethods=0x4388)
+    pkt /= UUIDEAttribute(id=0x1047, UUIDE=0x449264cd843b5380bc3227dd58793d63)
+    pkt /= PrimaryDeviceTypeAttribute(id=0x1054)
+    pkt /= RFBandsAttribute(id=0x103c, RFBands=0x03)
+    pkt /= AssociationStateAttribute(id=0x1002)
+    pkt /= ConfigurationErrorAttribute(id=0x1009)
+    pkt /= DevicePasswordIDAttribute(id=0x1012)
+    pkt /= ManufacturerAttribute(id=0x1021, Manufacturer=0x20)
+    pkt /= ModelNameAttribute(id=0x1023, ModelName=0x20)
+    pkt /= ModelNumberAttribute(id=0x1024, ModelNumber=0x20)
+    pkt /= DeviceNameAttribute(id=0x1011, DeviceName="wfuzz-p2p")
+
+    pkt /= Dot11EltWiFiAllianceP2P(len=17)
+    pkt /= P2PCapabilityAttribute(id=2, DeviceCapability=0x25)
+    pkt /= ListenChannelAttribute(id=6, OperatingClass=0x51, ChannelNumber=listen_channel)
+
+    pkt.build()
+    return pkt
+
+def build_p2p_probe_response(dst, iface, channel=1, sn=0):
+
+    iface_addr=get_iface_mac(iface)
+
+    dot11 = Dot11(type=0, subtype=5, ID=0x3c00,
+                  addr1=dst, addr2=iface_addr,
+                  addr3=iface_addr, SC=sn*16)
+    elt_rates = Dot11EltRates(rates=[0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c])
+
+    time_stamp = int(time.process_time_ns() * 0.001)
+    pkt = dot11 / Dot11ProbeResp(timestamp=time_stamp, cap=0x3004) / Dot11Elt(ID=0, info="{}".format("DIRECT-")) / elt_rates
+    pkt /= Dot11EltDSSSet(ID=3,channel=channel)
+
+    pkt /= Dot11EltWPS(len=90)
+    pkt /= VersionAttribute(id=0x104a, Version=0x10)
+    pkt /= WiFiSimpleConfigurationStateAttribute(id=0x1044,State=0x01)
+    pkt /= ResponseTypeAttribute(id=0x103B,ResponseType=0x00)
+    pkt /= UUIDEAttribute(id=0x1047, UUIDE=0x449264cd843b5380bc3227dd58793d63)
+    pkt /= ManufacturerAttribute(id=0x1021, Manufacturer=0x20)
+    pkt /= ModelNameAttribute(id=0x1023, ModelName=0x20)
+    pkt /= ModelNumberAttribute(id=0x1024, ModelNumber=0x20)
+    pkt /= SerialNumberAttribute(id=0x1042, SerialNumber=0x20)
+    pkt /= PrimaryDeviceTypeAttribute(id=0x1054)
+    pkt /= DeviceNameAttribute(id=0x1011, DeviceName="wfuzz-p2p")
+    pkt /= ConfigurationMethodsAttribute(id=0x1008, ConfigurationMethods=0x4388)
+
+    pkt /= Dot11EltWiFiAllianceP2P(len=42)
+    pkt /= P2PCapabilityAttribute(id=2, DeviceCapability=0x25)
+
+    pkt /= P2PDeviceInfoAttribute(id=13, len=30, P2PDeviceAddress=iface_addr,
+                                  ConfigMethods=0x1108, DeviceName=DeviceName(AttributeType=0x1011, data="wfuzz-p2p"))
+    return pkt
+
+
+SequenceNumber = 0
+
+def make_check_p2p(addr):
+    dst = addr
+    def check_p2p(pkt):
+        pkt.build()
+        if dst == "ff:ff:ff:ff:ff:ff":
+            return pkt.haslayer(Dot11ProbeReq) and pkt.haslayer(Dot11EltWiFiAllianceP2P)
+        else:
+            return pkt.haslayer(Dot11ProbeReq) and pkt.haslayer(Dot11EltWiFiAllianceP2P) and pkt.addr2 == dst
+    return check_p2p
+
+def make_process_p2p(iface="wlan0mon",listen_channel=11):
+    iface = iface
+    listen_channel=listen_channel
+    def process_p2p(pkt):
+        global SequenceNumber
+        pkt.build()
+        if pkt.haslayer(ListenChannelAttribute):
+            chl = pkt.getlayer(ListenChannelAttribute)
+            resp = build_p2p_probe_response(dst=pkt.addr2, iface=iface, channel=chl.ChannelNumber, sn=SequenceNumber)
+            resp = RadioTap() / resp
+            os.system("airmon-ng start {} {}".format(iface, chl.ChannelNumber))
+            sendp(resp , iface=iface)
+            SequenceNumber += 1
+            os.system("airmon-ng start {} {}".format(iface, listen_channel))
+    return process_p2p
+
+
+def test(
+          iface = "wlan0mon",
+          dst = "ff:ff:ff:ff:ff:ff",
+          listen_channel = 11,
+          scene=0
+):
+    global SequenceNumber
+    while True:
+        pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
+        pkt = RadioTap() / pkt
+        os.system('airmon-ng start {} 1'.format(iface))
+        sendp(pkt , iface=iface)
+        SequenceNumber += 1
+        pkt = build_p2p_probe_request(iface, channel=6, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
+        pkt = RadioTap() / pkt
+        os.system('airmon-ng start {} 6'.format(iface))
+        sendp(pkt , iface=iface)
+        SequenceNumber += 1
+        pkt = build_p2p_probe_request(iface, channel=11, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
+        pkt = RadioTap() / pkt
+        os.system('airmon-ng start {} 11'.format(iface))
+        sendp(pkt , iface=iface)
+        SequenceNumber += 1
+
+        # timeout 为0.1024s的1-3随机倍
+        os.system("airmon-ng start {} {}".format(iface, listen_channel))
+        r = random.randint(1,3)
+        sniff(iface=iface,
+              lfilter=make_check_p2p(dst),
+              prn=make_process_p2p(iface, listen_channel),
+              timeout=0.1024 * r
+              )

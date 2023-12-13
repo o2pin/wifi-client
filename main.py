@@ -3,6 +3,8 @@ import logging
 from pprint import pprint
 from src import connect_wpa3 as wpa3
 from src import connect as wpa2
+from src import p2p
+
 from utils.interface_mode import ensure_interface_mode,get_iface_mac
 
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
@@ -17,11 +19,11 @@ def main():
     parser = argparse.ArgumentParser(description=f"{NAME} (Version {VERSION}).")
     parser.add_argument('--iface', type=str, required=True, help="Interface name.")
     parser.add_argument('--client-mac', type=str, default=None, help="Interface mac.")
-    parser.add_argument('--ssid', type=str, required=True, help="SSID.")
+    parser.add_argument('--ssid', type=str, required=False, help="SSID.")
     parser.add_argument('--ap-mac', type=str, required=True, help="AP mac.")
-    parser.add_argument('--psk', type=str, required=True, help="WIFI psk.")
+    parser.add_argument('--psk', type=str, required=False, help="WIFI psk.")
     parser.add_argument('--scene', type=int, default=0, help="场景id.")
-    parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3
+    parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3 P2P
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
@@ -48,6 +50,13 @@ def main():
             client_mac = client_mac,
             scene = opt.scene
         )
+    if opt.suite == "P2P":
+        logging.info("P2P test suite")
+        p2p.test(
+            iface=iface,
+            dst=opt.ap_mac, #字母必须为小写
+            scene = opt.scene
+            )
 
 if __name__ == "__main__":
     main()
