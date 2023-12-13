@@ -6,6 +6,7 @@ from scapy.contrib.wpa_eapol import *
 from .libwifi import *
 import sys, struct, math, random, select, time, binascii
 
+from Crypto.Cipher import AES
 from Crypto.Hash import HMAC, SHA256
 from Crypto.PublicKey import ECC
 from Crypto.Math.Numbers import Integer
@@ -13,7 +14,7 @@ from Crypto.Math.Numbers import Integer
 # Alternative is https://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python
 from sympy.ntheory.residue_ntheory import sqrt_mod_iter
 
-from .utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from .utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
 
 # ----------------------- Utility ---------------------------------
 
@@ -396,7 +397,7 @@ class eapol_handshake():
 
         calc_mic = Calc_MIC()
         self.config.ptk, self.config.mic = calc_mic.run(self.config)
-        print(self.config.mic)
+        # print(self.config.mic)
         eapol_2[WPA_key].wpa_key_mic = bytes.fromhex(self.config.mic)
 
         eapol_2_packet = RadioTap() / Dot11(
@@ -428,13 +429,17 @@ class eapol_handshake():
         # eapol_3_sequence = eapol_3_packet.payload.SC
         self.config.encrypt_msg = eapol_3_packet[WPA_key].wpa_key
         replay_counter = eapol_3_packet[WPA_key].replay_counter
-        print("Encrypt Msg : ", self.config.encrypt_msg)
+        print("Encrypt Msg : ", self.config.encrypt_msg.hex())
 
-        # 解密出 gtk
-        # gtk_decrypt = GTKDecrypt(self.config)
-        # gtk , tk = gtk_decrypt.get_gtk()
-        # print("GTK : ", gtk)
-        # print("TK : ", tk)
+        # 解密出 gtk , 和 WPA2 不同
+        # try:
+        #     gtk_decrypt = GTKDecrypt(self.config)
+        #     gtk , tk = gtk_decrypt.get_gtk()
+        #     print("GTK : ", gtk)
+        #     print("TK : ", tk)
+        # except:
+        #     print("GTK 计算异常")
+
 
         # Key (Message 4 of 4)
         print("\n-------------------------\nKey (Message 4 of 4): ")
@@ -461,7 +466,7 @@ class eapol_handshake():
         # eapol_4_packet.show()
         sendp(eapol_4_packet, iface = self.config.iface)
 
-        return ptk
+        return self.config.ptk
 
 
 
@@ -501,7 +506,14 @@ def test(
     packet /= Raw(rate)
     assocation_1 = RadioTap() / packet
 
+    # sniff 关联响应
+    # t1 = AsyncSniffer(iface=config.iface, lfilter=lambda x: x[Dot11].addr1==config.mac_client and x.getlayer(Dot11AssoResp).seqnum == 1)
+    # t1.start()
+    # time.sleep(0.2)
     sendp(assocation_1, iface=iface)
+    # time.sleep(0.1)
+    # result = t1.stop()[0]
+
     # 密钥协商
     config = WiFi_Object(
             iface = iface,
@@ -518,7 +530,38 @@ def test(
 
 
     EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
-    ptk = EAPOL_connect.run()
+    PTK = EAPOL_connect.run()
+
+    # 断开认证
+    print("\n-------------------------\n从AP离开: ")
+    TK : bytes = PTK[-16:]
+    Plain_text = bytes(Dot11Deauth(reason=3))
+    # print("TK & Plain_text : ", TK.hex(), Plain_text.hex())
+    dot11_packet = ( 
+                    Dot11(type=0, subtype=12, FCfield="protected",
+                         addr1=config.mac_ap, 
+                         addr2=config.mac_client, 
+                         addr3=config.mac_ap
+                         ) / 
+                    Dot11CCMP(ext_iv=1, PN0=4))
+    # print("Dot11 Layer", bytes(dot11_packet).hex())
+    packet = dot11_packet
+    PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
+    Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_client,pn=PN)
+    cipher = AES.new(TK, AES.MODE_CCM, Nonce, mac_len = 8)
+    deauth_cipher = cipher.encrypt(Plain_text)
+    # print("deauth_cipher : ", deauth_cipher.hex())
+    aad = CCMPCrypto.ccmp_get_aad(dot11_packet, amsdu_spp=False)
+    MIC = CCMPCrypto.cbc_mac(TK, Plain_text, aad, Nonce)
+    # print("Deauth MIC : ", MIC.hex())
+    wpa3_deauth = ( 
+                    RadioTap() / 
+                    dot11_packet / 
+                    Raw(deauth_cipher) / 
+                    Raw(MIC)
+                    )
+    sendp(wpa3_deauth, iface = config.iface)
+
 
 if __name__ == "__main__":
     test()
