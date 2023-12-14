@@ -85,62 +85,100 @@ def build_p2p_probe_response(dst, iface, channel=1, sn=0):
 
 SequenceNumber = 0
 
-def make_check_p2p(addr):
+def make_check_p2p_req(addr):
     dst = addr
-    def check_p2p(pkt):
+    def check_p2p_req(pkt):
         pkt.build()
         if dst == "ff:ff:ff:ff:ff:ff":
             return pkt.haslayer(Dot11ProbeReq) and pkt.haslayer(Dot11EltWiFiAllianceP2P)
         else:
             return pkt.haslayer(Dot11ProbeReq) and pkt.haslayer(Dot11EltWiFiAllianceP2P) and pkt.addr2 == dst
-    return check_p2p
+    return check_p2p_req
 
-def make_process_p2p(iface="wlan0mon",listen_channel=11):
+def make_check_p2p_resp(addr):
+    dst = addr
+    def check_p2p_resp(pkt):
+        pkt.build()
+        if dst == "ff:ff:ff:ff:ff:ff":
+            return pkt.haslayer(Dot11ProbeResp) and pkt.haslayer(Dot11EltWiFiAllianceP2P)
+        else:
+            return pkt.haslayer(Dot11ProbeResp) and pkt.haslayer(Dot11EltWiFiAllianceP2P) and pkt.addr2 == dst
+    return check_p2p_resp
+
+def make_process_p2p_req(iface="wlan0mon",listen_channel=11,SequenceNumber=1):
     iface = iface
     listen_channel=listen_channel
-    def process_p2p(pkt):
-        global SequenceNumber
+    sequence_number=SequenceNumber
+    def process_p2p_req(pkt):
         pkt.build()
-        if pkt.haslayer(ListenChannelAttribute):
-            chl = pkt.getlayer(ListenChannelAttribute)
-            resp = build_p2p_probe_response(dst=pkt.addr2, iface=iface, channel=chl.ChannelNumber, sn=SequenceNumber)
-            resp = RadioTap() / resp
-            os.system("airmon-ng start {} {}".format(iface, chl.ChannelNumber))
-            sendp(resp , iface=iface)
-            SequenceNumber += 1
-            os.system("airmon-ng start {} {}".format(iface, listen_channel))
-    return process_p2p
+        resp = build_p2p_probe_response(dst=pkt.addr2, iface=iface, channel=listen_channel, sn=sequence_number)
+        resp = RadioTap() / resp
+        sendp(resp , iface=iface)
+        print("req")
+        print(sequence_number)
+        exit(1)
+    return process_p2p_req
 
+def make_process_p2p_resp(iface="wlan0mon",listen_channel=11):
+    iface = iface
+    listen_channel=listen_channel
+    def process_p2p_resp(pkt):
+        pkt.build()
+        # pkt.show2()
+        print(listen_channel)
+        print("resp")
+        print(SequenceNumber)
+        exit(1)
+    return process_p2p_resp
 
 def test(
           iface = "wlan0mon",
           dst = "ff:ff:ff:ff:ff:ff",
-          listen_channel = 11,
-          scene=0
+          listen_channel = 6,
+          scene=0,
+          timeout = 0.1024,
+          seed=1
 ):
     global SequenceNumber
-    while True:
+    SequenceNumber = seed % 4095
+    if scene == 0:
         pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 1'.format(iface))
         sendp(pkt , iface=iface)
         SequenceNumber += 1
+        sniff(iface=iface,
+              lfilter=make_check_p2p_resp(dst),
+              prn=make_process_p2p_resp(iface, 1),
+              timeout=timeout,
+              count=1
+              )
         pkt = build_p2p_probe_request(iface, channel=6, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 6'.format(iface))
         sendp(pkt , iface=iface)
         SequenceNumber += 1
+        sniff(iface=iface,
+              lfilter=make_check_p2p_resp(dst),
+              prn=make_process_p2p_resp(iface, 6),
+              timeout=timeout,
+              count=1
+              )
         pkt = build_p2p_probe_request(iface, channel=11, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 11'.format(iface))
         sendp(pkt , iface=iface)
         SequenceNumber += 1
-
-        # timeout 为0.1024s的1-3随机倍
-        os.system("airmon-ng start {} {}".format(iface, listen_channel))
-        r = random.randint(1,3)
         sniff(iface=iface,
-              lfilter=make_check_p2p(dst),
-              prn=make_process_p2p(iface, listen_channel),
-              timeout=0.1024 * r
+              lfilter=make_check_p2p_resp(dst),
+              prn=make_process_p2p_resp(iface, 11),
+              timeout=timeout,
+              count=1
               )
+    elif scene == 1:
+        os.system("airmon-ng start {} {}".format(iface, listen_channel))
+        sniff(iface=iface,
+              lfilter=make_check_p2p_req(dst),
+              prn=make_process_p2p_req(iface, listen_channel,SequenceNumber=SequenceNumber),
+              timeout=timeout,
+            )

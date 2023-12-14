@@ -24,6 +24,10 @@ def main():
     parser.add_argument('--psk', type=str, required=False, help="WIFI psk.")
     parser.add_argument('--scene', type=int, default=0, help="场景id.")
     parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3 P2P
+    parser.add_argument('--timeout', type=int, default=100, help="超时时间.")  #ms
+    parser.add_argument('--listen-channel', type=int, default=11, help="监听频段.")  #1，6，11
+    parser.add_argument('--seed', type=int, default=1, help="序列数.")  #ms
+
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
@@ -55,7 +59,10 @@ def main():
         p2p.test(
             iface=iface,
             dst=opt.ap_mac, #字母必须为小写
-            scene = opt.scene
+            scene = opt.scene,
+            timeout = opt.timeout,
+            listen_channel = opt.listen_channel,
+            seed=opt.seed
             )
 
 if __name__ == "__main__":
