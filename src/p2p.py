@@ -1,11 +1,12 @@
+import logging
 import os
 import random
 import re
 import subprocess
 import time
-# import scapy.layers.dot11 as scapy_dot11
+from utils.bridge import *
 from scapy.layers.dot11 import Dot11EltVendorSpecific as scapy_Dot11EltVendorSpecific
-from scapy.sendrecv import sendp, sniff
+# from scapy.sendrecv import sniff, sendp
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
 
 from .libwifi import ETHER_BROADCAST
@@ -110,25 +111,18 @@ def make_process_p2p_req(iface="wlan0mon",listen_channel=11,SequenceNumber=1):
     listen_channel=listen_channel
     sequence_number=SequenceNumber
     def process_p2p_req(pkt):
+        logging.info("recv p2p req")
         pkt.build()
         resp = build_p2p_probe_response(dst=pkt.addr2, iface=iface, channel=listen_channel, sn=sequence_number)
-        resp = RadioTap() / resp
         sendp(resp , iface=iface)
-        print("req")
-        print(sequence_number)
-        exit(1)
+        logging.info("sendp p2p response")
     return process_p2p_req
 
 def make_process_p2p_resp(iface="wlan0mon",listen_channel=11):
     iface = iface
     listen_channel=listen_channel
     def process_p2p_resp(pkt):
-        pkt.build()
-        # pkt.show2()
-        print(listen_channel)
-        print("resp")
-        print(SequenceNumber)
-        exit(1)
+        logging.info("recv p2p response: ", listen_channel)
     return process_p2p_resp
 
 def test(
@@ -137,48 +131,45 @@ def test(
           listen_channel = 6,
           scene=0,
           timeout = 0.1024,
-          seed=1
+          seed=0
 ):
+    logging.info("P2P test")
+    logging.info("timeout : {}s".format(timeout))
     global SequenceNumber
-    SequenceNumber = seed % 4095
+    if seed != 0:
+        SequenceNumber = seed % 4095
+    else:
+        SequenceNumber = random.randint(1,4095)
+    logging.info("SequenceNumber : {}".format(SequenceNumber))
     if scene == 0:
+        logging.info("P2P search")
+
         pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 1'.format(iface))
         sendp(pkt , iface=iface)
         SequenceNumber += 1
-        sniff(iface=iface,
-              lfilter=make_check_p2p_resp(dst),
-              prn=make_process_p2p_resp(iface, 1),
-              timeout=timeout,
-              count=1
-              )
+
         pkt = build_p2p_probe_request(iface, channel=6, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 6'.format(iface))
         sendp(pkt , iface=iface)
         SequenceNumber += 1
-        sniff(iface=iface,
-              lfilter=make_check_p2p_resp(dst),
-              prn=make_process_p2p_resp(iface, 6),
-              timeout=timeout,
-              count=1
-              )
+
         pkt = build_p2p_probe_request(iface, channel=11, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        pkt = RadioTap() / pkt
         os.system('airmon-ng start {} 11'.format(iface))
         sendp(pkt , iface=iface)
-        SequenceNumber += 1
-        sniff(iface=iface,
-              lfilter=make_check_p2p_resp(dst),
-              prn=make_process_p2p_resp(iface, 11),
-              timeout=timeout,
-              count=1
-              )
+        exit(0)
+
+
     elif scene == 1:
+        logging.info("P2P listen")
         os.system("airmon-ng start {} {}".format(iface, listen_channel))
-        sniff(iface=iface,
-              lfilter=make_check_p2p_req(dst),
-              prn=make_process_p2p_req(iface, listen_channel,SequenceNumber=SequenceNumber),
-              timeout=timeout,
-            )
+        lst = sniff(iface=iface,
+            lfilter=make_check_p2p_req(dst),
+            prn=make_process_p2p_req(iface, listen_channel,SequenceNumber=SequenceNumber),
+            timeout=timeout,
+            count=1
+        )
+        if len(lst) == 0:
+            exit(1)
+        else:
+            exit(0)

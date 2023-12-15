@@ -42,8 +42,6 @@ def new_sendp(x, iface=None, **kargs):
         pkt = RadioTap() / x
         raw_sendp(pkt, iface=iface, **kargs)
 
-    if x.haslayer(RadioTap):
-        x = x.getlayer(Dot11)
     my_sendp(correct_addr1_sendp, x, iface=iface, **kargs)
 
 raw_sendp = sendp

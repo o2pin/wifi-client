@@ -26,7 +26,7 @@ def main():
     parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3 P2P
     parser.add_argument('--timeout', type=int, default=100, help="超时时间.")  #ms
     parser.add_argument('--listen-channel', type=int, default=11, help="监听频段.")  #1，6，11
-    parser.add_argument('--seed', type=int, default=1, help="序列数.")  #ms
+    parser.add_argument('--seed', type=int, default=1, help="随机种子.")
 
     opt = parser.parse_args()
     logging.info(opt)
@@ -60,7 +60,7 @@ def main():
             iface=iface,
             dst=opt.ap_mac, #字母必须为小写
             scene = opt.scene,
-            timeout = opt.timeout,
+            timeout = opt.timeout / 1000,
             listen_channel = opt.listen_channel,
             seed=opt.seed
             )
