@@ -491,7 +491,8 @@ def test(
     print("KCK", kck.hex())
     print("PMK", pmk.hex())
     sae.send_confirm(iface=iface)
-
+    if scene == 0:
+        sys.exit(0)
 
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()
@@ -515,6 +516,8 @@ def test(
     # t1.start()
     # time.sleep(0.2)
     sendp(assocation_1, iface=iface)
+    if scene == 1:
+        sys.exit(0)
     # time.sleep(0.1)
     # result = t1.stop()[0]
 

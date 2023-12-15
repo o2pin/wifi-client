@@ -4,6 +4,7 @@ from pprint import pprint
 from src import connect_wpa3 as wpa3
 from src import connect as wpa2
 from utils.interface_mode import ensure_interface_mode,get_iface_mac
+import sys
 
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
@@ -38,7 +39,7 @@ def main():
             client_mac = client_mac,
             scene = opt.scene
        )
-    if opt.suite == "WPA2":
+    elif opt.suite == "WPA2":
         logging.info("WPA2 test suite")
         wpa2.test(
             iface=iface,
@@ -48,6 +49,9 @@ def main():
             client_mac = client_mac,
             scene = opt.scene
         )
+    else:
+        logging.error("Not support suite {}", opt.suite)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

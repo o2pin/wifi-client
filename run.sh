@@ -10,6 +10,6 @@
 
 # 链路认证 密钥协商
 
-sudo ~/.python3/bin/python3 wpa_fuzz/main.py --iface wlan0mon --ssid shuimuyulin-guest --psk smyl2020 --ap-mac "5A:41:20:1D:26:ED"sudo /home/peter/project/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan1 --ssid testnetwork --psk passphrase --mac-ap 02:00:00:00:00:00 --fuzz_scene 2 --suite WPA3
-
-sudo /home/peter/project/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan3 --ssid testnetwork --psk passphrase --mac-ap 02:00:00:00:02:00 --fuzz_scene 2
+sudo ~/.python3/bin/python3 main.py --iface wlan0mon --ssid shuimuyulin-guest --psk smyl2020 --ap-mac "5A:41:20:1D:26:ED"
+sudo ~/project/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan1 --ssid testnetwork --psk passphrase --ap-mac 02:00:00:00:00:00 --scene 2 --suite WPA2
+sudo ~/project/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan3 --ssid testnetwork --psk passphrase --ap-mac 02:00:00:00:02:00 --scene 2 --suite WPA3
