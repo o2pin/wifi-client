@@ -27,13 +27,12 @@ def main():
     logging.info(opt)
     logging.info('start p2p main')  # will not print anything
     iface = ensure_interface_mode(opt.iface)
-    client_mac = opt.client_mac if opt.client_mac else get_iface_mac(iface)
 
     if opt.suite == "P2P":
         logging.info("P2P test suite")
         p2p.test(
             iface=iface,
-            dst=opt.ap_mac.lower(), #字母必须为小写
+            dst=opt.ap_mac.lower(),
             scene = opt.scene,
             timeout = opt.timeout / 1000,
             listen_channel = opt.listen_channel,
