@@ -7,7 +7,7 @@ import time
 from utils.bridge import *
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
 
-from .libwifi import ETHER_BROADCAST
+from .libwifi import ETHER_BROADCAST, set_channel
 from .dot11p2p import DeviceName, Dot11EltWiFiAllianceP2P, ListenChannelAttribute, P2PAttribute, P2PCapabilityAttribute, P2PDeviceInfoAttribute, PrimaryDeviceTypeData
 from .dot11wps import AssociationStateAttribute, ConfigurationErrorAttribute, ConfigurationMethodsAttribute, DeviceNameAttribute, DevicePasswordIDAttribute, Dot11EltWPS, ManufacturerAttribute, ModelNameAttribute, ModelNumberAttribute, PrimaryDeviceTypeAttribute, RFBandsAttribute, RequestTypeAttribute, ResponseTypeAttribute, SerialNumberAttribute, UUIDEAttribute, VersionAttribute, WiFiSimpleConfigurationStateAttribute, WPSAttribute
 
@@ -144,24 +144,24 @@ def test(
         logging.info("P2P search")
 
         pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        os.system('airmon-ng start {} 1'.format(iface))
+        set_channel(iface, 1)
         send(pkt , iface=iface)
         SequenceNumber += 1
 
         pkt = build_p2p_probe_request(iface, channel=6, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        os.system('airmon-ng start {} 6'.format(iface))
+        set_channel(iface, 6)
         send(pkt , iface=iface)
         SequenceNumber += 1
 
         pkt = build_p2p_probe_request(iface, channel=11, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
-        os.system('airmon-ng start {} 11'.format(iface))
+        set_channel(iface, 11)
         send(pkt , iface=iface)
         exit(0)
 
 
     elif scene == 1:
         logging.info("P2P listen")
-        os.system("airmon-ng start {} {}".format(iface, listen_channel))
+        set_channel(iface, listen_channel)
         lst = sniff(iface=iface,
             lfilter=make_check_p2p_req(dst),
             prn=make_process_p2p_req(iface, listen_channel,SequenceNumber=SequenceNumber),
