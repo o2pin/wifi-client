@@ -5,8 +5,6 @@ import re
 import subprocess
 import time
 from utils.bridge import *
-from scapy.layers.dot11 import Dot11EltVendorSpecific as scapy_Dot11EltVendorSpecific
-# from scapy.sendrecv import sniff, sendp
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
 
 from .libwifi import ETHER_BROADCAST
@@ -114,8 +112,8 @@ def make_process_p2p_req(iface="wlan0mon",listen_channel=11,SequenceNumber=1):
         logging.info("recv p2p req")
         pkt.build()
         resp = build_p2p_probe_response(dst=pkt.addr2, iface=iface, channel=listen_channel, sn=sequence_number)
-        sendp(resp , iface=iface)
-        logging.info("sendp p2p response")
+        send(resp , iface=iface)
+        logging.info("send p2p response")
     return process_p2p_req
 
 def make_process_p2p_resp(iface="wlan0mon",listen_channel=11):
@@ -133,6 +131,7 @@ def test(
           timeout = 0.1024,
           seed=0
 ):
+    conf.iface = iface
     logging.info("P2P test")
     logging.info("timeout : {}s".format(timeout))
     global SequenceNumber
@@ -146,17 +145,17 @@ def test(
 
         pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         os.system('airmon-ng start {} 1'.format(iface))
-        sendp(pkt , iface=iface)
+        send(pkt , iface=iface)
         SequenceNumber += 1
 
         pkt = build_p2p_probe_request(iface, channel=6, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         os.system('airmon-ng start {} 6'.format(iface))
-        sendp(pkt , iface=iface)
+        send(pkt , iface=iface)
         SequenceNumber += 1
 
         pkt = build_p2p_probe_request(iface, channel=11, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         os.system('airmon-ng start {} 11'.format(iface))
-        sendp(pkt , iface=iface)
+        send(pkt , iface=iface)
         exit(0)
 
 
