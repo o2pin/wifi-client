@@ -85,7 +85,7 @@ def build_p2p_probe_response(dst, iface, channel=1, sn=0):
 def build_go_negotiation_request(iface, sn=0, dst=ETHER_BROADCAST, listen_channel=11, seed=1):
     iface_addr=get_iface_mac(iface)
 
-    dot11 = Dot11(type=0, subtype=13, addr1=dst, addr2=iface_addr, addr3=ETHER_BROADCAST, SC=sn*16)
+    dot11 = Dot11(type=0, subtype=13, addr1=dst, addr2=iface_addr, addr3=dst, SC=sn*16)
     pkt = dot11 / GONegotiatioRequest()
     pkt /= Dot11EltWiFiAllianceP2P(len=97, P2PAttributes=[
         P2PCapabilityAttribute(id=2, DeviceCapability=0x25, GroupCapability=0x2a),
@@ -114,7 +114,7 @@ def build_go_negotiation_response(iface, sn=0, dst=ETHER_BROADCAST, listen_chann
 
     dot11 = Dot11(type=0, subtype=13, ID=0x2800,
                   addr1=dst, addr2=iface_addr,
-                  addr3=iface_addr, SC=sn*16)
+                  addr3=dst, SC=sn*16)
     pkt = dot11 / GONegotiationResponse()
     pkt /= Dot11EltWiFiAllianceP2P(len=173, P2PAttributes=[
         StatusAttribute(StatusCode=0),
@@ -336,8 +336,10 @@ def GroupFormationTest(
             prn=make_process_p2p_go_negotiation_response(iface),
             timeout=timeout,
         )
+        exit(0)
     elif scene==1:
         logging.info("scene 1: Provision Discovery")
         pkt = build_p2p_provision_discovery_request(iface, sn=SequenceNumber, dst=dst)
         SequenceNumber += 1
         send(pkt , iface=iface)
+        exit(0)
