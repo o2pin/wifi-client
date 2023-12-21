@@ -5,7 +5,6 @@ import re
 import subprocess
 import time
 from utils.bridge import *
-# from scapy.config import conf
 
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
 
