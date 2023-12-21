@@ -1364,7 +1364,7 @@ class Dot11EltHTCapabilities(Dot11Elt):
 
 
 class Dot11EltVendorSpecific(Dot11Elt):
-    name = "802.11    Vendor    Specific"
+    name = "802.11 Vendor Specific"
     match_subclass = True
     fields_desc = [
         ByteEnumField("ID", 221, _dot11_id_enum),
@@ -1461,7 +1461,6 @@ class Dot11ReassoResp(Dot11AssoResp):
 
 class Dot11ProbeReq(_Dot11EltUtils):
     name = "802.11 Probe Request"
-
 
 class Dot11ProbeResp(_Dot11EltUtils):
     name = "802.11 Probe Response"

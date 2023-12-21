@@ -20,8 +20,8 @@ def new_send(x: Dot11, iface=None, **kargs):
 
     my_send(correct_addr1_send, x, iface=iface, **kargs)
 
-raw_send = send
-send = new_send
+# raw_send = send
+# send = new_send
 
 # new sniff 当前预期适用于sniff仅接收一个回包
 def new_sniff(*args, **kargs):
@@ -31,8 +31,8 @@ def new_sniff(*args, **kargs):
         my_sniff(data)
     return data
 
-raw_sniff = sniff
-sniff = new_sniff
+# raw_sniff = sniff
+# sniff = new_sniff
 
 # new sendp
 def new_sendp(x, iface=None, **kargs):

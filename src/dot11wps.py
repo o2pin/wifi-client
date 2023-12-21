@@ -238,7 +238,7 @@ class VersionAttribute(WPSAttribute):
         id = 0x104a
         len = 1
         fields_desc = WPSAttribute.fields_desc[:2] + [
-            ByteField("Version", 0)
+            XByteField("Version", 0)
         ]
 
 class WiFiSimpleConfigurationStateAttribute(WPSAttribute):

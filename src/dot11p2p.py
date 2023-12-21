@@ -1,7 +1,10 @@
+import struct
 from scapy.packet import Packet
 from scapy.fields import BitField, ByteEnumField, ByteField, ConditionalField, FieldLenField, FieldListField, FlagsField, IntField, MACField, NBytesField, OUIField, PacketField, PacketListField, ShortEnumField, StrFixedLenField, StrLenField, XByteField, ShortField, XIntField, XShortField
 from scapy.fields import LEShortField
-from .dot11 import _Dot11MacField, Dot11Elt, _dot11_id_enum, Dot11EltVendorSpecific
+
+from scapy.compat import orb
+from .dot11 import _Dot11EltUtils, _Dot11MacField, Dot11, Dot11Elt, _dot11_id_enum, Dot11EltVendorSpecific
 
 from scapy.packet import bind_layers
 
@@ -96,6 +99,19 @@ connection_capabilities = {
     0x05: "New, GO",
     0x06: "Cli, GO"
 }
+
+p2p_public_action_frame_type = {
+    0: "GO Negotiation Request",
+    1: "GO Negotiation Response",
+    2: "GO Negotiation Confirmation",
+    3: "P2P Invitation Request",
+    4: "P2P Invitation Response",
+    5: "Device Discoverability Request",
+    6: "Device Discoverability Response",
+    7: "Provision Discovery Request",
+    8: "Provision Discovery Response"
+}
+
 device_capability_bitmap = [
     "Service Discovery",
     "P2P Client Discoverability",
@@ -126,10 +142,11 @@ manageability_bitmap = [
 
 class ChannelEntry(Packet):
     name = "Channel Entry"
+    show_indent = 0
     fields_desc = [
         ByteField("OperatingClass", 0),
-        FieldLenField("number", None, count_of="Channel_List"),
-        FieldListField("Channel_List", None, ByteField("channel", 0), count_from = lambda pkt: pkt.number)
+        FieldLenField("number", None, fmt="B", count_of="Channel_List"),
+        FieldListField("Channel_List", [], XByteField("", 0), count_from = lambda pkt: pkt.number)
     ]
 
 class NoticeOfAbsenceDescriptor(Packet):
@@ -151,18 +168,25 @@ class PrimaryDeviceTypeData(Packet):
         XShortField("SubCategoryID", 0),
     ]
 
+    def extract_padding(self, s):
+        return "", s
+
 class TLVDataFormat(Packet):
     name = "TLV Data Format"
     fields_desc = [
         XShortField("AttributeType", 0),
-        FieldLenField("length", None, length_of="data"),
+        FieldLenField("length", None, fmt="H", length_of="data"),
         StrLenField("data", "", length_from=lambda pkt:pkt.length)
     ]
+
+    def extract_padding(self, s):
+        return "", s
 
 class SecondaryDeviceTypeData(PrimaryDeviceTypeData):
     name = "Secondary Device Type"
 
 class DeviceName(TLVDataFormat):
+    AttributeType=0x1011
     name = "Device Name"
 
 class AdvertisedServiceDescriptor(Packet):
@@ -187,7 +211,7 @@ class P2PClientInfoDescriptor(Packet):
         ByteField("number_of_secondary_device_types", 0),
         PacketListField("SecondaryDeviceTypeList", [], SecondaryDeviceTypeData,
                         count_from = lambda pkt: pkt.number_of_secondary_device_types),
-        PacketField("DeviceAme", None, DeviceName)
+        PacketField("DeviceName", None, DeviceName)
     ]
 
 #8.4.2.2 of IEEE 802.11-2012
@@ -341,7 +365,7 @@ class ListenChannelAttribute(P2PAttribute):
         ]
 
 class P2PGroupBSSIDAttribute(P2PAttribute):
-        name = "Listen Channel Attribute"
+        name = "P2P Group BSSID Attribute"
         match_subclass = True
         id = 7
         len = 6
@@ -365,7 +389,7 @@ class IntendedP2PInterfaceAddressAttribute(P2PAttribute):
         id = 9
         len = 6
         fields_desc = P2PAttribute.fields_desc[:2] + [
-            NBytesField("P2PInterfaceAddress", 0, 6)
+            MACField("P2PInterfaceAddress", 0)
         ]
 
 class P2PManageabilityAttribute(P2PAttribute):
@@ -387,8 +411,8 @@ class ChannelListAttribute(P2PAttribute):
         match_subclass = True
         id = 11
         fields_desc = P2PAttribute.fields_desc[:2] + [
-            StrFixedLenField("Country", "", 3),
-            PacketListField("ChannelEntryList", [], ChannelEntry)
+            StrFixedLenField("Country", "XX", 3),
+            PacketListField("ChannelEntryList", [], ChannelEntry, length_from=lambda pkt:pkt.len -3)
         ]
 
 
@@ -410,7 +434,7 @@ class P2PDeviceInfoAttribute(P2PAttribute):
         match_subclass = True
         id = 13
         fields_desc = P2PAttribute.fields_desc[:2] + [
-            _Dot11MacField("P2PDeviceAddress", 0, 6),
+            MACField("P2PDeviceAddress", 0),
             ShortEnumField("ConfigMethods", 0x1000, configuration_methods),
             PacketField("PrimaryDeviceType", PrimaryDeviceTypeData(), PrimaryDeviceTypeData),
             ByteField("number_of_secondary_device_types", 0),
@@ -433,8 +457,10 @@ class P2PGroupIDAttribute(P2PAttribute):
         match_subclass = True
         id = 15
         fields_desc = P2PAttribute.fields_desc[:2] + [
-            NBytesField("P2P_device_address", 0, 6),
-            PacketField("SSIDElement", None, SSIDElement)
+            MACField("P2P_device_address", 0),
+            # PacketField("SSIDElement", None, SSIDElement)
+            StrLenField("SSIDElement", "DIRECT-", length_from=lambda pkt:pkt.len-6)
+
         ]
 
 class P2PInterfaceAttribute(P2PAttribute):
@@ -454,7 +480,7 @@ class OperatingChannelAttribute(P2PAttribute):
         len = 5
         id = 17
         fields_desc = P2PAttribute.fields_desc[:2] + [
-            StrFixedLenField("country", "", 3),
+            StrFixedLenField("country", "XX", 3),
             ByteField("OperatingClass", 0),
             ByteField("ChannelNumber", 0)
         ]
@@ -569,6 +595,74 @@ class Dot11EltWiFiAllianceP2P(Dot11EltVendorSpecific):
         )
     ]
 
+class Dot11PublicAction(_Dot11EltUtils):
+    name = "802.11 Public Action"
+    fields_desc = [ByteField("Category", 0x04),
+                   ByteField("ActionField", 0x09),
+                   OUIField("oui", 0x506F9A),
+                   ByteField("OUItype", 0x09),
+                   ByteEnumField("OUISubtype", 0, p2p_public_action_frame_type),
+                   ByteField("DialogToken", 1)
+                   ]
+
+    @classmethod
+    def dispatch_hook(cls, _pkt=None, *args, **kargs):
+        if _pkt:
+            oui = struct.unpack("!I", b"\x00" + _pkt[2:5])[0]
+        if oui == 0x506f9a: # Wi-Fi Alliance
+                type_ = orb(_pkt[5])
+                if type_ == 0x09:
+                    # Wi-Fi Alliance P2P IE
+                    subtype_ = orb(_pkt[6])
+                    if subtype_ == 0:
+                        return GONegotiatioRequest
+                    elif subtype_ == 1:
+                        return GONegotiationResponse
+                    elif subtype_ == 2:
+                        return GONegotiationConfirmation
+                    elif subtype_ == 3:
+                        return P2PInvitationRequest
+                    elif subtype_ == 4:
+                        return P2PInvitationResponse
+                    elif subtype_ == 7:
+                        return P2PProvisionDiscoveryRequest
+                    elif subtype_ == 8:
+                        return P2PProvisionDiscoveryResponse
+                return Dot11EltVendorSpecific
+        return cls
+
+class GONegotiatioRequest(Dot11PublicAction):
+      name = "GO Negotiation Request"
+      OUISubtype = 0
+
+class GONegotiationResponse(Dot11PublicAction):
+      name = "GO Negotiation Response"
+      OUISubtype = 1
+
+class GONegotiationConfirmation(Dot11PublicAction):
+      name = "GO Negotiation Confirmation"
+      OUISubtype = 2
+
+class P2PInvitationRequest(Dot11PublicAction):
+      name = "P2P Invitation Request"
+      OUISubtype = 3
+
+class P2PInvitationResponse(Dot11PublicAction):
+      name = "P2P Invitation Response"
+      OUISubtype = 4
+
+class P2PProvisionDiscoveryRequest(Dot11PublicAction):
+      name = "Provision Discovery Request"
+      OUISubtype = 7
+
+class P2PProvisionDiscoveryResponse(Dot11PublicAction):
+      name = "Provision Discovery Response"
+      OUISubtype = 8
+
+bind_layers(Dot11PublicAction, Dot11EltWiFiAllianceP2P)
 bind_layers(Dot11Elt, Dot11EltWiFiAllianceP2P)
 bind_layers(Dot11EltWiFiAllianceP2P, P2PAttribute)
 bind_layers(P2PAttribute, P2PAttribute)
+bind_layers(Dot11, Dot11PublicAction, subtype=13, type=0)
+bind_layers(ChannelEntry, ChannelEntry)
+bind_layers(ChannelEntry, P2PAttribute)

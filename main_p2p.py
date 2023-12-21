@@ -28,9 +28,19 @@ def main():
     logging.info('start p2p main')  # will not print anything
     iface = ensure_interface_mode(opt.iface)
 
-    if opt.suite == "P2P":
-        logging.info("P2P test suite")
-        p2p.test(
+    if opt.suite == "P2P-DeviceDiscovery":
+        logging.info("P2P Device Discovery test suite")
+        p2p.DeviceDiscoveryTest(
+            iface=iface,
+            dst=opt.ap_mac.lower(),
+            scene = opt.scene,
+            timeout = opt.timeout / 1000,
+            listen_channel = opt.listen_channel,
+            seed=opt.seed
+            )
+    elif opt.suite == "P2P-GroupFormation":
+        logging.info("P2P Group Formation test suite")
+        p2p.GroupFormationTest(
             iface=iface,
             dst=opt.ap_mac.lower(),
             scene = opt.scene,
