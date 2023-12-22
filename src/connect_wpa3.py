@@ -32,12 +32,12 @@ class SAE(Packet):
 
 
 class WiFi_Object:
-    def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic="", kck=b"", pmk=b""):
+    def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic="", kck=b"", pmk=b""):
         self.iface:str  = iface
         self.ssid:str  = ssid
         self.psk:str  = psk
         self.mac_ap:str  = mac_ap
-        self.mac_client:str  = mac_client
+        self.mac_sta:str  = mac_sta
         self.ff_mac:str  = "ff:ff:ff:ff:ff:ff"
         self.anonce:bytes = bytes.fromhex(anonce)
         self.snonce:bytes = bytes.fromhex(snonce)
@@ -405,7 +405,7 @@ class eapol_handshake():
                                 subtype=8,
                                 FCfield=1,
                                 addr1=self.config.mac_ap,
-                                addr2=self.config.mac_client,
+                                addr2=self.config.mac_sta,
                                 addr3=self.config.mac_ap,
                                 SC=32 )  / Dot11QoS() / LLC() / SNAP() / eapol_2
         # eapol_2_packet.show()
@@ -460,7 +460,7 @@ class eapol_handshake():
             subtype=8,
             FCfield=1,
             addr1=self.config.mac_ap,
-            addr2=self.config.mac_client,
+            addr2=self.config.mac_sta,
             addr3=self.config.mac_ap,
             SC=48)  / Dot11QoS() / LLC() / SNAP() / eapol_4
         # eapol_4_packet.show()
@@ -476,14 +476,14 @@ def test(
     ssid = "testnetwork",
     psk = "passphrase",
     ap_mac = "e4:02:9b:5c:fe:fe",
-    client_mac = "00:c0:aa:00:09:3a",
+    sta_mac = "00:c0:aa:00:09:3a",
     scene = 2,
 ):
-    sae = SAEHandshake(password=psk,srcaddr=client_mac,dstaddr=ap_mac)
+    sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
 
     sae_commit_1 = sae.send_commit()
     t1 = AsyncSniffer(iface=iface, 
-                      lfilter=lambda x: x[Dot11].addr1==client_mac and x.haslayer(Dot11Auth) and x.getlayer(Dot11Auth).seqnum == 1, 
+                      lfilter=lambda x: x[Dot11].addr1==sta_mac and x.haslayer(Dot11Auth) and x.getlayer(Dot11Auth).seqnum == 1, 
                       prn=lambda r: print(r.summary())
                       )
     t1.start()
@@ -506,7 +506,7 @@ def test(
     rsn_info = rsn.get_rsn_info()
     packet = Dot11(
                 addr1=ap_mac,
-                addr2=client_mac,
+                addr2=sta_mac,
                 addr3=ap_mac,
                 SC=16)
     packet /= Dot11AssoReq(
@@ -520,7 +520,7 @@ def test(
     assocation_1 = RadioTap() / packet
 
     # sniff 关联响应 association response
-    # t1 = AsyncSniffer(iface=config.iface, lfilter=lambda x: x[Dot11].addr1==config.mac_client and x.getlayer(Dot11AssoResp).seqnum == 1)
+    # t1 = AsyncSniffer(iface=config.iface, lfilter=lambda x: x[Dot11].addr1==config.mac_sta and x.getlayer(Dot11AssoResp).seqnum == 1)
     # t1.start()
     # time.sleep(0.2)
     sendp(assocation_1, iface=iface)
@@ -535,7 +535,7 @@ def test(
             ssid = ssid,
             psk = psk,
             mac_ap = ap_mac,
-            mac_client = client_mac,
+            mac_sta = sta_mac,
             anonce = "",
             snonce = "",
             payload = (""),
@@ -555,14 +555,14 @@ def test(
     dot11_packet = ( 
                     Dot11(type=0, subtype=12, FCfield="protected",
                          addr1=config.mac_ap, 
-                         addr2=config.mac_client, 
+                         addr2=config.mac_sta, 
                          addr3=config.mac_ap
                          ) / 
                     Dot11CCMP(ext_iv=1, PN0=4))
     # print("Dot11 Layer", bytes(dot11_packet).hex())
     packet = dot11_packet
     PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
-    Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_client,pn=PN)
+    Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_sta,pn=PN)
     cipher = AES.new(TK, AES.MODE_CCM, Nonce, mac_len = 8)
     deauth_cipher = cipher.encrypt(Plain_text)
     # print("deauth_cipher : ", deauth_cipher.hex())

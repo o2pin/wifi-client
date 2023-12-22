@@ -17,7 +17,7 @@ def main():
     # Arguments.
     parser = argparse.ArgumentParser(description=f"{NAME} (Version {VERSION}).")
     parser.add_argument('--iface', type=str, required=True, help="Interface name.")
-    parser.add_argument('--client-mac', type=str, default=None, help="Interface mac.")
+    parser.add_argument('--sta-mac', type=str, default=None, help="Interface mac.")
     parser.add_argument('--ssid', type=str, required=True, help="SSID.")
     parser.add_argument('--ap-mac', type=str, required=True, help="AP mac.")
     parser.add_argument('--psk', type=str, required=True, help="WIFI psk.")
@@ -27,7 +27,7 @@ def main():
     logging.info(opt)
     logging.info('start main')  # will not print anything
     iface = ensure_interface_mode(opt.iface)
-    client_mac = opt.client_mac if opt.client_mac else get_iface_mac(iface)
+    sta_mac = opt.sta_mac if opt.sta_mac else get_iface_mac(iface)
 
     if opt.suite == "WPA3":
         logging.info("WPA3 test suite")
@@ -36,7 +36,7 @@ def main():
             ssid = opt.ssid,
             psk = opt.psk,
             ap_mac = opt.ap_mac,
-            client_mac = client_mac,
+            sta_mac = sta_mac,
             scene = opt.scene
        )
     elif opt.suite == "WPA2":
@@ -46,7 +46,7 @@ def main():
             ssid = opt.ssid,
             psk = opt.psk,
             ap_mac = opt.ap_mac,
-            client_mac = client_mac,
+            sta_mac = sta_mac,
             scene = opt.scene
         )
     else:

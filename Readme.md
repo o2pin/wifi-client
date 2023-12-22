@@ -122,7 +122,7 @@ sudo ~/wifi-framework/setup/venv/bin/python3 ./main.py --iface wlan0mon
             "args": [
                 "--iface",
                 "wlan0mon",
-                "--client-mac",
+                "--sta-mac",
                 "00:1d:43:20:18:d4"
             ],
             "justMyCode": true,

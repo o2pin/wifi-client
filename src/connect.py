@@ -1,5 +1,7 @@
 import logging
 import multiprocessing
+from scapy.layers.dot11 import Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
+from scapy.layers.l2    import SNAP
 from scapy.all import *
 from scapy.contrib.wpa_eapol import *
 import binascii
@@ -8,15 +10,15 @@ from Crypto.Cipher import AES
 import pprint
 
 from .utils_wifi_inject import Monitor, RSN
-from .utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text
+from .utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
 
 class WiFi_Object:
-    def __init__(self, iface, ssid, psk, mac_ap="", mac_client="", anonce="", snonce="", payload="", mic=""):
+    def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic=""):
         self.iface:str  = iface
         self.ssid:str  = ssid
         self.psk:str  = psk
         self.mac_ap:str  = mac_ap
-        self.mac_client:str  = mac_client
+        self.mac_sta:str  = mac_sta
         self.ff_mac:str  = "ff:ff:ff:ff:ff:ff"
         self.anonce:bytes = bytes.fromhex(anonce)
         self.snonce:bytes = bytes.fromhex(snonce)
@@ -173,7 +175,7 @@ class eapol_handshake():
                                 subtype=8,
                                 FCfield=1,
                                 addr1=self.config.mac_ap,
-                                addr2=self.config.mac_client,
+                                addr2=self.config.mac_sta,
                                 addr3=self.config.mac_ap,
                                 SC=32 )  / Dot11QoS() / LLC() / SNAP() / eapol_2
         # eapol_2_packet.show()
@@ -222,7 +224,7 @@ class eapol_handshake():
             subtype=8,
             FCfield=1,
             addr1=self.config.mac_ap,
-            addr2=self.config.mac_client,
+            addr2=self.config.mac_sta,
             addr3=self.config.mac_ap,
             SC=48)  / Dot11QoS() / LLC() / SNAP() / eapol_4
         # eapol_4_packet.show()
@@ -236,7 +238,7 @@ def test(
         ssid = "testnetwork",
         psk = "passphrase",
         ap_mac = "02:00:00:00:02:00",
-        client_mac = "02:00:00:00:03:00",
+        sta_mac = "02:00:00:00:03:00",
         scene = 2,
 ):
     config = WiFi_Object(
@@ -244,7 +246,7 @@ def test(
         ssid = ssid,
         psk = psk,
         mac_ap = ap_mac,
-        mac_client = client_mac,
+        mac_sta = sta_mac,
         anonce = "",
         snonce = "",
         payload = ("")
@@ -254,8 +256,8 @@ def test(
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()       # rsn info
     conf.iface = config.iface
-    monitor = Monitor(config.iface, config.mac_client.lower(), config.mac_ap.lower())
-    connectionphase_1 = ConnectionPhase(monitor, config.mac_client, config.mac_ap)
+    monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower())
+    connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
 
     # 链路认证
     logging.info("\n-------------------------Link Authentication Request : ")
@@ -306,14 +308,14 @@ def test(
             subtype=8,
             FCfield=65,
             addr1=config.mac_ap,
-            addr2=config.mac_client,
+            addr2=config.mac_sta,
             addr3=config.ff_mac,
             SC=64)  / Dot11QoS() / Dot11CCMP(ext_iv=1, PN0=1)
 
     packet = dot11_packet
     PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
     qos_priority = "00"       # 0 = tk , 1 = gtk
-    Nonce = CCMPCrypto.ccmp_get_nonce(priority=qos_priority , addr=config.mac_client, pn=PN)
+    Nonce = CCMPCrypto.ccmp_get_nonce(priority=qos_priority , addr=config.mac_sta, pn=PN)
 
     generate_payload = Generate_Plain_text()
     Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp

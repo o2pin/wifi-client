@@ -1,6 +1,10 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-​
 
+from scapy.layers.dot11 import Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
+from scapy.layers.l2    import SNAP
+from scapy.layers.dhcp import BOOTP
+from scapy.all import ARP, IP, UDP
 from scapy.all import *
 import binascii
 import hashlib, hmac
@@ -34,8 +38,8 @@ class Calc_MIC():
         
     #     return pmk
 
-    def calc_ptk(self, pmk, anonce, snonce, mac_ap, mac_client):
-        macs = self.min_max(mac_ap, mac_client)
+    def calc_ptk(self, pmk, anonce, snonce, mac_ap, mac_sta):
+        macs = self.min_max(mac_ap, mac_sta)
         nonces = self.min_max(anonce, snonce)
         ptk_inputs = b''.join([ macs[0], macs[1], nonces[0], nonces[1]])
         Label=bytes("Pairwise key expansion",'utf-8')
@@ -63,10 +67,10 @@ class Calc_MIC():
 
     def run(self, config):
         mac_ap = bytes.fromhex((config.mac_ap).replace(":",""))
-        mac_client = bytes.fromhex((config.mac_client).replace(":",""))
+        mac_sta = bytes.fromhex((config.mac_sta).replace(":",""))
         
         # pmk = self.calculate_WPA_PMK(config.pmk, config.ssid)
-        PTK = self.calc_ptk(config.pmk, config.anonce, config.snonce, mac_ap, mac_client)
+        PTK = self.calc_ptk(config.pmk, config.anonce, config.snonce, mac_ap, mac_sta)
         # print("PTK:",PTK)
         # print("KCK:",PTK[0:32])
         # print("KEK:",PTK[32:64])
@@ -98,8 +102,8 @@ class GTKDecrypt():
     
     def generate_ptk_kek(self):
         mac_ap = bytes.fromhex((self.config.mac_ap).replace(":",""))
-        mac_client = bytes.fromhex((self.config.mac_client).replace(":",""))
-        macs = Calc_MIC.min_max(self, mac_ap, mac_client)
+        mac_sta = bytes.fromhex((self.config.mac_sta).replace(":",""))
+        macs = Calc_MIC.min_max(self, mac_ap, mac_sta)
         nonces = self.min_max(self.config.anonce, self.config.snonce)
         ptk = self.prf_80211i(self.config.pmk, b"Pairwise key expansion", macs[0] + macs[1] + nonces[0] + nonces[1], 384)
 
@@ -141,9 +145,7 @@ class Generate_Plain_text():
                             sname=b'' * 64 ,
                             file=b'' * 128 ,
                             options=b'63825363', 
-                            # options=[message-type=request client_id='\x01\x00\x1dC \x19-' requested_addr=192.168.4.119 hostname=b'bichenshao-pc' client_FQDN=b'\x00\x00\x00bichenshao-pc' vendor_class_id='MSFT 5.0' param_req_list=[1, 3, 6, 15, 31, 33, 43, 44, 46, 47, 119, 121, 249, 252] end ........]
                             )
-            print(TK , nonce.hex())
             ip = IP(dst="255.255.255.255", src = "0.0.0.0")
             udp = UDP(sport = 68, dport = 67)
             

@@ -1,4 +1,5 @@
 import multiprocessing
+from scapy.layers.dot11 import Dot11AssoResp,Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
 from scapy.all import *
 
 from utils.bridge import *
