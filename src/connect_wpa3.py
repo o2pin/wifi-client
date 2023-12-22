@@ -2,6 +2,8 @@
 # TODO: Program unit tests so we can easily keep our EAP-pwd code correct
 #!/usr/bin/env python3
 from scapy.all import *
+from scapy.layers.dot11 import Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
+from scapy.layers.l2    import SNAP
 from scapy.contrib.wpa_eapol import *
 from .libwifi import *
 import sys, struct, math, random, select, time, binascii
@@ -206,7 +208,7 @@ class SAEHandshake():
         self.kck = None
         self.pmk = None
 
-    def send_commit(self, iface):
+    def send_commit(self):
         self.pwe = derive_pwe_ecc(self.password, self.dstaddr, self.srcaddr)
 
         # After generation of the PWE, each STA shall generate a secret value, rand, and a temporary secret value,
@@ -223,15 +225,10 @@ class SAEHandshake():
         temp = self.pwe * mask
         self.element = ECC.EccPoint(temp.x, Integer(secp256r1_p) - temp.y)
 
-        auth = build_sae_commit(self.srcaddr, self.dstaddr, self.scalar, self.element)
-        t1 = AsyncSniffer(iface=iface, lfilter=lambda x: x[Dot11].addr1==self.srcaddr and x.getlayer(Dot11Auth).seqnum == 1)
-        t1.start()
-        time.sleep(0.2)
-        sendp(RadioTap() / auth ,iface=iface)
-        time.sleep(0.1)
-        result = t1.stop()[0]
+        sae_commit_1 = build_sae_commit(self.srcaddr, self.dstaddr, self.scalar, self.element)
+        
 
-        return result
+        return sae_commit_1
 
     def process_commit(self, p):
         self.peer_scalar = int.from_bytes(p.scalar, byteorder='big')
@@ -475,17 +472,28 @@ class eapol_handshake():
 
 # ----------------------- Fuzzing/Testing ---------------------------------
 def test(
-    iface = "monwlan1",
+    iface = "monwlan0",
     ssid = "testnetwork",
     psk = "passphrase",
-    ap_mac = "02:00:00:00:00:00",
-    client_mac = "02:00:00:00:01:00",
+    ap_mac = "e4:02:9b:5c:fe:fe",
+    client_mac = "00:c0:aa:00:09:3a",
     scene = 2,
 ):
     sae = SAEHandshake(password=psk,srcaddr=client_mac,dstaddr=ap_mac)
 
-    commit_2 = sae.send_commit(iface)
-    dot11_sae = SAE(commit_2[Dot11Auth].payload.original)
+    sae_commit_1 = sae.send_commit()
+    t1 = AsyncSniffer(iface=iface, 
+                      lfilter=lambda x: x[Dot11].addr1==client_mac and x.haslayer(Dot11Auth) and x.getlayer(Dot11Auth).seqnum == 1, 
+                      prn=lambda r: print(r.summary())
+                      )
+    t1.start()
+    time.sleep(0.2)
+    sendp(RadioTap() / sae_commit_1 ,iface=iface)
+    # time.sleep(0.5)
+    
+    sae_commit_2 = t1.stop()[0]
+    
+    dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
     # dot11_sae.show()
     kck, pmk = sae.process_commit(dot11_sae)
     print("KCK", kck.hex())

@@ -1,42 +1,34 @@
-from scapy.all import *
+import os
+if "SOCKET_PROXY_HOST" in os.environ:
+    from scapy.all import *
+    from socket_hook_py import *
+    from scapy.layers.dot11 import Dot11
 
-from socket_hook_py import *
-from scapy.layers.dot11 import Dot11
+    # new_send
+    def new_send(x: Dot11, iface=None, **kargs):
+        def inner_send(x: Dot11):
+            raw_send(x, iface=iface, **kargs)
+        my_send(inner_send, x)
 
-# new_send
-def new_send(x: Dot11, iface=None, **kargs):
-    # subtype = x[Dot11].subtype
-    # type_ = x[Dot11].type
-    # fcfield = x[Dot11].FCfield
-    # id = x[Dot11].ID
-    # addr1 = x[Dot11].addr1
-    # addr2 = x[Dot11].addr2
-    # addr3 = x[Dot11].addr3
-    # sc = x[Dot11].SC
-    def correct_addr1_send(x: Dot11, iface=None, **kargs):
-        # 不修改变异后的的数据包, 修改会导致保存的和实际发送的不一致, 复现会有问题
-        # x[Dot11].addr1 = addr1
-        raw_send(x, iface=None, **kargs)
+    # new sendp
+    def new_sendp(x, iface=None, **kargs):
+        def inner_sendp(x):
+            raw_sendp(x, iface=iface, **kargs)
+        my_send(inner_sendp, x)
 
-    my_send(correct_addr1_send, x, iface=iface, **kargs)
+    raw_sendp = sendp
+    sendp = new_sendp
+    raw_send = send
+    send = new_send
 
-raw_send = send
-send = new_send
+    # new sniff
+    def new_sniff(*args, **kargs):
+        data = raw_sniff(*args, **kargs)
+        if len(data) != 0:
+            for i in range(len(data)):
+                my_sniff(data[i])
+        return data
 
-# new sniff 当前预期适用于sniff仅接收一个回包
-def new_sniff(*args, **kargs):
-    data = raw_sniff(*args, **kargs)
-    if len(data) != 0:
-        data = data[0]
-        my_sniff(data)
-    return data
+    raw_sniff = sniff
+    sniff = new_sniff
 
-raw_sniff = sniff
-sniff = new_sniff
-
-# new sendp
-def new_sendp(x, iface=None, **kargs):
-    my_sendp(raw_sendp, x, iface=iface, **kargs)
-
-raw_sendp = sendp
-sendp = new_sendp
