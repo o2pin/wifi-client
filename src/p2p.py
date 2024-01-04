@@ -4,7 +4,7 @@ import random
 import re
 import subprocess
 import time
-from utils.bridge import *
+from socket_hook_py import sendp, sniff
 
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
 
@@ -257,7 +257,7 @@ def make_process_p2p_go_negotiation_request(iface="wlan0mon"):
         send(confirmation , iface=iface)
     return process_p2p_go_negotiation_request
 
-def DeviceDiscoveryTest(
+def Test(
           iface = "wlan0mon",
           dst = "ff:ff:ff:ff:ff:ff",
           listen_channel = 6,
@@ -266,17 +266,21 @@ def DeviceDiscoveryTest(
           seed=0
 ):
     conf.iface = iface
-    logging.info("P2P Device Discovery Test")
+
+    logging.info("P2P Test")
     logging.info("iface : {}".format(iface))
     logging.info("dst : {}".format(dst))
     logging.info("timeout : {}s".format(timeout))
+
     global SequenceNumber
+
     if seed != 0:
         SequenceNumber = seed % 4095
     else:
         SequenceNumber = random.randint(1,4095)
-    if scene == 0:
-        logging.info("P2P search")
+
+    if scene == 1:
+        logging.info("scene 1: P2P search")
 
         pkt = build_p2p_probe_request(iface, channel=1, sn=SequenceNumber, dst=dst, listen_channel=listen_channel)
         set_channel(iface, 1)
@@ -294,8 +298,8 @@ def DeviceDiscoveryTest(
         exit(0)
 
 
-    elif scene == 1:
-        logging.info("P2P listen")
+    elif scene == 0:
+        logging.info("scene 0: P2P listen")
         set_channel(iface, listen_channel)
         lst = sniff(iface=iface,
                 lfilter=make_check_p2p_req(dst),
@@ -309,25 +313,8 @@ def DeviceDiscoveryTest(
             exit(0)
 
 
-def GroupFormationTest(
-          iface = "wlan0mon",
-          dst = "ff:ff:ff:ff:ff:ff",
-          listen_channel = 6,
-          scene=0,
-          timeout = 0.1024,
-          seed=0
-):
-    conf.iface = iface
-    logging.info("P2P Group Formation Test")
-    logging.info("iface : {}".format(iface))
-    logging.info("dst : {}".format(dst))
-    logging.info("timeout : {}s".format(timeout))
-    global SequenceNumber
-    if seed == 0:
-        seed = random.randint(1,65535)
-    SequenceNumber = seed % 4095
-    if scene==0:
-        logging.info("scene 0: GO Negotiation")
+    elif scene == 2:
+        logging.info("scene 2: GO Negotiation")
         pkt = build_go_negotiation_request(iface, sn=SequenceNumber, dst=dst, listen_channel=listen_channel, seed=seed)
         SequenceNumber += 1
         send(pkt , iface=iface)
@@ -337,9 +324,12 @@ def GroupFormationTest(
             timeout=timeout,
         )
         exit(0)
-    elif scene==1:
-        logging.info("scene 1: Provision Discovery")
+    elif scene == 3:
+        logging.info("scene 3: Provision Discovery")
         pkt = build_p2p_provision_discovery_request(iface, sn=SequenceNumber, dst=dst)
         SequenceNumber += 1
         send(pkt , iface=iface)
         exit(0)
+    else:
+        logging.info("scene {}: Unsupported".format(scene))
+        exit(2)
