@@ -12,6 +12,8 @@ import pprint
 from .utils_wifi_inject import Monitor, RSN
 from .utils_wifi_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
 
+from socket_hook_py import * 
+
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic=""):
         self.iface:str  = iface
