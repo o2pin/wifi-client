@@ -479,6 +479,7 @@ def test(
     sta_mac = "00:c0:aa:00:09:3a",
     scene = 2,
 ):
+    conf.iface = iface
     sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
 
     sae_commit_1 = sae.send_commit()
