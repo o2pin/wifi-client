@@ -7,7 +7,6 @@ from scapy.arch.linux import L2Socket, attach_filter
 from datetime import datetime
 import binascii
 
-from socket_hook_py import * 
 
 #### Constants ####
 

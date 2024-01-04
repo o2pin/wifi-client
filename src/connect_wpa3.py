@@ -13,7 +13,7 @@ from Crypto.Hash import HMAC, SHA256
 from Crypto.PublicKey import ECC
 from Crypto.Math.Numbers import Integer
 
-from socket_hook_py import * 
+from socket_hook_py import sendp, sniff 
 # Alternative is https://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python
 from sympy.ntheory.residue_ntheory import sqrt_mod_iter
 
