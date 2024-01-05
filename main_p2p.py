@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--iface', type=str, required=True, help="Interface name.")
     parser.add_argument('--ap-mac', type=str, required=True, help="AP mac.")
     parser.add_argument('--scene', type=int, default=0, help="场景id.")
-    parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.")  # WPA2 WPA3 P2P
+    parser.add_argument('--suite', type=str, default="P2P", help="测试套件.")  #P2P
     parser.add_argument('--timeout', type=int, default=100, help="超时时间.")  #ms
     parser.add_argument('--listen-channel', type=int, default=11, help="监听频段.")  #1，6，11
     parser.add_argument('--seed', type=int, default=1, help="随机种子.")
@@ -28,9 +28,9 @@ def main():
     logging.info('start p2p main')  # will not print anything
     iface = ensure_interface_mode(opt.iface)
 
-    if opt.suite == "P2P-DeviceDiscovery":
-        logging.info("P2P Device Discovery test suite")
-        p2p.DeviceDiscoveryTest(
+    if opt.suite == "P2P":
+        logging.info("P2P test suite")
+        p2p.Test(
             iface=iface,
             dst=opt.ap_mac.lower(),
             scene = opt.scene,
@@ -38,16 +38,9 @@ def main():
             listen_channel = opt.listen_channel,
             seed=opt.seed
             )
-    elif opt.suite == "P2P-GroupFormation":
-        logging.info("P2P Group Formation test suite")
-        p2p.GroupFormationTest(
-            iface=iface,
-            dst=opt.ap_mac.lower(),
-            scene = opt.scene,
-            timeout = opt.timeout / 1000,
-            listen_channel = opt.listen_channel,
-            seed=opt.seed
-            )
+    else:
+        logging.info("Unsupported test suite")
+        exit(2)
 
 if __name__ == "__main__":
     main()
