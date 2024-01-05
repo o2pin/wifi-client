@@ -4,6 +4,7 @@ import random
 import re
 import subprocess
 import time
+from scapy.config import conf
 from socket_hook_py import sendp, sniff
 
 from .dot11 import Dot11, Dot11Elt, Dot11EltDSSSet, Dot11EltHTCapabilities, Dot11EltRates, Dot11EltVendorSpecific, Dot11ProbeReq, Dot11ProbeResp, RadioTap
@@ -332,4 +333,4 @@ def Test(
         exit(0)
     else:
         logging.info("scene {}: Unsupported".format(scene))
-        exit(2)
+        exit(1)
