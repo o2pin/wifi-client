@@ -1,8 +1,16 @@
-import multiprocessing
-from scapy.layers.dot11 import Dot11AssoResp,Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
-from scapy.all import *
+import logging
+from scapy.layers.dot11 import Dot11AssoResp,Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC ,Dot11EltMicrosoftWPA
+from scapy.layers.eap import EAPOL
+from scapy.contrib.wpa_eapol import *
+from scapy.layers.dot11 import Dot11Auth, Dot11, RadioTap
+from scapy.layers.l2 import LLC, SNAP
+from scapy.fields import *
+from scapy.arch import str2mac, get_if_raw_hwaddr
+from scapy.sendrecv import sendp, send, sniff, AsyncSniffer
+from scapy import config as scapyconfig
 
-from socket_hook_py import sendp, send, sniff 
+
+# from socket_hook_py import sendp, send, sniff 
 class Dot11EltRates(Packet):
     """
     Our own definition for the supported rates field
@@ -22,7 +30,8 @@ class Dot11EltRates(Packet):
             index + 1), rate))
 
 class RSN():
-    def get_rsn_info(self):
+    @staticmethod
+    def get_rsn_info():
         rsn_info = Dot11EltRSN(
                 len=22,         # len=22  smyl    /      len=20   xiaomi hotspot
                 group_cipher_suite=RSNCipherSuite(),
@@ -38,6 +47,20 @@ class RSN():
 
         return rsn_info
 
+
+class TKIP_info():
+    @staticmethod
+    def gen_tkip_info():
+        tkip_info = Dot11EltMicrosoftWPA(
+            len=22,
+            group_cipher_suite=RSNCipherSuite(oui=0x0050f2,cipher=2),   # 0x0050f2 是ieee分配给微软的oui  , 2 代表 TKIP
+            nb_pairwise_cipher_suites=1,
+            pairwise_cipher_suites=RSNCipherSuite(oui=0x0050f2,cipher=2),
+            nb_akm_suites=1,
+            akm_suites=[AKMSuite(oui=0x0050f2,suite=2)] # 2 代表 PSK
+            )
+
+        return tkip_info
 class Monitor:
     def __init__(self, mon_ifc, sta_mac, bssid):
         """
@@ -72,11 +95,11 @@ class Monitor:
         # Send out the packet
         logging.info(f"Send package packet_type: {packet_type}")
         if packet_type is None:
-            send(packet)
+            send(packet, verbose=0) # verbose=0, 即不需要显示报文发送提示
 
         elif packet_type == "AssoReq":
             packet /= self.dot11_rates
-            send(packet)
+            send(packet, verbose=0)
         else:
             logging.info("Packet Type '{0}' unknown".format(packet_type))
 

@@ -1,10 +1,13 @@
 import argparse
 import logging
-from pprint import pprint
-from src import connect_wpa3 as wpa3
-from src import connect as wpa2
-from utils.interface_mode import ensure_interface_mode,get_iface_mac
 import sys
+
+from utils.interface_mode import ensure_interface_mode,get_iface_mac
+from src import \
+    connect_wpa3 as wpa3, \
+    connect_wpa1_wpa2 as wpa1_wpa2
+
+
 
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
@@ -41,13 +44,25 @@ def main():
        )
     elif opt.suite == "WPA2":
         logging.info("WPA2 test suite")
-        wpa2.test(
+        wpa1_wpa2.test(
             iface=iface,
             ssid = opt.ssid,
             psk = opt.psk,
             ap_mac = opt.ap_mac,
             sta_mac = sta_mac,
-            scene = opt.scene
+            scene = opt.scene,
+            wpa_keyver=opt.suite
+        )
+    elif opt.suite == "WPA1":
+        logging.info("WPA1 test suite")
+        wpa1_wpa2.test(
+            iface=iface,
+            ssid = opt.ssid,
+            psk = opt.psk,
+            ap_mac = opt.ap_mac,
+            sta_mac = sta_mac,
+            scene = opt.scene,
+            wpa_keyver=opt.suite
         )
     else:
         logging.error("Not support suite {}", opt.suite)
