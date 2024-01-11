@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-​
 import logging
-logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 
+from Crypto.Cipher import AES
 from scapy.all import Raw
 from scapy.layers.dot11 import (
     RadioTap, 
@@ -13,10 +13,12 @@ from scapy.layers.dot11 import (
     Dot11QoS
     )
 from scapy.layers.l2 import SNAP
-from Crypto.Cipher import AES
+
 from .utils_wpa1_wpa2_crypt import CCMPCrypto,Gen_Target_layer
 
+# ----------------------- Utility ---------------------------------
 
+logging.getLogger("scapy.runtime").setLevel(logging.ERROR)
 FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 

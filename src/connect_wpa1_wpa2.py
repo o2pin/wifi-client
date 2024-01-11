@@ -1,29 +1,22 @@
-import logging
-import multiprocessing
+import logging, multiprocessing, time, sys
+
 from scapy.layers.dot11 import (
     Dot11Auth,
-    Dot11Deauth,
     Dot11,
     RadioTap,
     Dot11AssoReq,
     Dot11Elt,
-    Dot11EltRSN,
-    RSNCipherSuite,
-    AKMSuite,
-    Dot11QoS ,
-    LLC ,
-    Dot11CCMP
+    Dot11QoS,
+    LLC,
+    conf
     )
 from scapy.layers.l2    import SNAP
-from scapy.all import *
-from scapy.contrib.wpa_eapol import *
-import sys
-from Crypto.Cipher import AES
+from scapy.contrib.wpa_eapol import WPA_key, EAPOL
+from scapy.utils import randstring
 
 from .utils_wifi_inject import Monitor, RSN, TKIP_info
 from .utils_wpa1_wpa2_crypt import Calc_MIC, GTKDecrypt
 from .utils_wpa2_arp_dhcp import ONCE_REQ
-
 from socket_hook_py import sendp, send, sniff 
 
 
@@ -251,6 +244,7 @@ class eapol_handshake():
         # print(f'{self.config.encrypt_msg.hex()}')
 
         ## 解密出 gtk
+        tk = None
         if self.config.wpa_keyver == 'WPA2':
             gtk_decrypt = GTKDecrypt(self.config)
             gtk , tk = gtk_decrypt.get_gtk()
@@ -294,6 +288,7 @@ def test(
         sta_mac = "02:00:00:00:01:00",
         scene = 3,
         wpa_keyver= 'WPA2',
+        we_will_send = 'DHCP',
         router_ip = '192.168.4.1'
 ):
     config = WiFi_Object(
@@ -354,7 +349,6 @@ def test(
 
     # # 和 AP 加密通信
     if wpa_keyver== 'WPA2':
-        we_will_send = 'ARP' # ARP or DHCP
         logging.info(f"\n-------------------------Send {we_will_send} Request : ")
         logging.info(f" TK : {TK}")
         setattr(config, 'TK', TK)
@@ -362,7 +356,7 @@ def test(
         encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
         
         sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
-        logging.info(f'We sent 1 {we_will_send} ! ')
+        logging.info(f'We sent 1 {we_will_send} . ')
 
 if __name__ == "__main__":
     test()

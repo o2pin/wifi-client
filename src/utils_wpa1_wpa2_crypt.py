@@ -4,11 +4,18 @@
 
 import binascii
 import hashlib, hmac
-from Crypto.Cipher import AES
-from cryptography.hazmat.primitives.keywrap import aes_key_unwrap, aes_key_wrap
 import pyaes
 
-from scapy.all import LLC, SNAP, ARP, IP, UDP, DHCP, BOOTP, struct, raw, Dot11QoS
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
+
+from scapy.layers.dot11 import Dot11QoS
+from scapy.layers.l2 import  ARP
+from scapy.layers.inet import IP, UDP
+from scapy.layers.dhcp import DHCP, BOOTP
+
+from scapy.fields import struct, raw
+
+# ----------------------- Utility ---------------------------------
 
 class Calc_MIC():
     '''
@@ -197,11 +204,7 @@ class CCMPCrypto:
     
     @staticmethod
     def cbc_mac(key, plaintext, aad, nonce, iv=b"\x00" * 16, mac_len=8):
-        '''
-        # 使用方法举例
-        # MIC = CCMPCrypto.cbc_mac(tk, plaintext, aad, nonce)
-        # plaintext 结构举例 LLC / SNAP / ARP
-        '''
+        
         assert len(key) == len(iv) == 16  # aes-128
         assert len(nonce) == 13
         iv = int.from_bytes(iv, byteorder="big")

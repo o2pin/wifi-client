@@ -1,5 +1,21 @@
 import logging
-from scapy.layers.dot11 import Dot11AssoResp,Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC ,Dot11EltMicrosoftWPA
+from scapy.layers.dot11 import (
+    Dot11Auth,
+    Dot11Deauth,
+    Dot11,
+    Dot11EltMicrosoftWPA,
+    Dot11AssoResp,
+    Dot11CCMP,
+    RadioTap,
+    Dot11AssoReq,
+    Dot11Elt,
+    Dot11EltRSN,
+    RSNCipherSuite,
+    AKMSuite,
+    Dot11QoS,
+    LLC,
+    conf
+    )
 from scapy.layers.eap import EAPOL
 from scapy.contrib.wpa_eapol import *
 from scapy.layers.dot11 import Dot11Auth, Dot11, RadioTap

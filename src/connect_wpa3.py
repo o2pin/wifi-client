@@ -1,24 +1,39 @@
 # TODO: For now only include the code we actually used for EAP-pwd
 # TODO: Program unit tests so we can easily keep our EAP-pwd code correct
 #!/usr/bin/env python3
-from scapy.all import *
-from scapy.layers.dot11 import Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
-from scapy.layers.l2    import SNAP
-from scapy.contrib.wpa_eapol import *
-from .libwifi import *
-import sys, struct, math, random, select, time, binascii
+import sys, struct, math, random, time, binascii,logging
 
 from Crypto.Cipher import AES
 from Crypto.Hash import HMAC, SHA256
 from Crypto.PublicKey import ECC
 from Crypto.Math.Numbers import Integer
 
-from socket_hook_py import sendp, sniff 
-# Alternative is https://eli.thegreenplace.net/2009/03/07/computing-modular-square-roots-in-python
-from sympy.ntheory.residue_ntheory import sqrt_mod_iter
+from scapy.layers.dot11 import (
+    Dot11Auth,
+    Dot11Deauth,
+    Dot11,
+    Dot11CCMP,
+    RadioTap,
+    Dot11AssoReq,
+    Dot11Elt,
+    Dot11EltRSN,
+    RSNCipherSuite,
+    AKMSuite,
+    Dot11QoS,
+    LLC,
+    conf
+    )
+from scapy.layers.l2    import SNAP
+from scapy.contrib.wpa_eapol import WPA_key, EAPOL
+from scapy.fields import ShortEnumField,StrFixedLenField
+from scapy.packet import Packet,Raw
+from scapy.utils import randstring
+from scapy.sendrecv import AsyncSniffer
 
-from .utils_wpa3_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
+from .libwifi import log,DEBUG
+from .utils_wpa3_crypt import Calc_MIC, CCMPCrypto
 from .utils_wifi_inject import Dot11EltRates
+from socket_hook_py import sendp, sniff 
 
 # ----------------------- Utility ---------------------------------
 
@@ -33,7 +48,10 @@ class SAE(Packet):
 
 
 class WiFi_Object:
-    def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic="", kck=b"", pmk=b""):
+    def __init__(self, iface, ssid, psk, 
+                 mac_ap="", mac_sta="", anonce="", snonce="", 
+                 payload="", mic="", kck=b"", pmk=b""
+                 ):
         self.iface:str  = iface
         self.ssid:str  = ssid
         self.psk:str  = psk
@@ -473,14 +491,30 @@ class eapol_handshake():
 
 # ----------------------- Fuzzing/Testing ---------------------------------
 def test(
-    iface = "monwlan0",
-    ssid = "testnetwork",
-    psk = "passphrase",
-    ap_mac = "e4:02:9b:5c:fe:fe",
-    sta_mac = "00:c0:aa:00:09:3a",
-    scene = 2,
+    iface   = "wlan1",
+    ssid    = "testnetwork",
+    psk     = "passphrase",
+    ap_mac  = "02:00:00:00:00:00",
+    sta_mac = "02:00:00:00:01:00",
+    scene   = 2,
+    wpa_keyver  = 'WPA2',
+    router_ip   = '192.168.4.1'
 ):
     conf.iface = iface
+    
+    config = WiFi_Object(
+        iface = iface,
+        ssid = ssid,
+        psk = psk,
+        mac_ap = ap_mac,
+        mac_sta = sta_mac,
+        anonce = "",
+        snonce = "",
+        payload = "",
+    )
+    
+    logging.debug(config.__dict__)
+    
     sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
 
     sae_commit_1 = sae.send_commit()
@@ -493,7 +527,11 @@ def test(
     sendp(RadioTap() / sae_commit_1 ,iface=iface)
     # time.sleep(0.5)
     
-    sae_commit_2 = t1.stop()[0]
+    try:
+        sae_commit_2 = t1.stop()[0]
+    except IndexError:
+        logging.error('Not Found SAE Auth commit response .')
+        sys.exit(1)
     
     dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
     # dot11_sae.show()

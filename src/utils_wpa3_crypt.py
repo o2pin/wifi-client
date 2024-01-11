@@ -1,18 +1,25 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-​
 
-from scapy.layers.dot11 import Dot11Auth,Dot11Deauth, Dot11, RadioTap, Dot11AssoReq, Dot11Elt, Dot11EltRSN, RSNCipherSuite,AKMSuite, Dot11QoS ,LLC 
-from scapy.layers.l2    import SNAP
-from scapy.layers.dhcp import BOOTP
-from scapy.all import ARP, IP, UDP
-from scapy.all import *
+import pyaes
 import binascii
 import hashlib, hmac
+
+from scapy.layers.dot11 import (
+    Dot11QoS,
+    LLC,
+    )
+from scapy.fields import struct
+from scapy.packet import raw
+from scapy.layers.l2    import SNAP, ARP
+from scapy.layers.dhcp import BOOTP
+from scapy.layers.inet import IP, UDP
+
 from Crypto.Cipher import AES
 from Crypto.Hash import CMAC
-from cryptography.hazmat.primitives.keywrap import aes_key_unwrap, aes_key_wrap
-import pyaes
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
 
+# ----------------------- Utility ---------------------------------
 
 class Calc_MIC():
     
