@@ -29,6 +29,7 @@ def main():
     opt = parser.parse_args()
     logging.info(opt)
     logging.info('start main')  # will not print anything
+    
     iface = ensure_interface_mode(opt.iface)
     sta_mac = opt.sta_mac if opt.sta_mac else get_iface_mac(iface)
 
@@ -51,7 +52,8 @@ def main():
             ap_mac = opt.ap_mac,
             sta_mac = sta_mac,
             scene = opt.scene,
-            wpa_keyver=opt.suite
+            wpa_keyver=opt.suite,
+            router_ip = '192.168.4.1'
         )
     elif opt.suite == "WPA1":
         logging.info("WPA1 test suite")
@@ -62,7 +64,8 @@ def main():
             ap_mac = opt.ap_mac,
             sta_mac = sta_mac,
             scene = opt.scene,
-            wpa_keyver=opt.suite
+            wpa_keyver=opt.suite,
+            router_ip = '192.168.4.1'
         )
     else:
         logging.error("Not support suite {}", opt.suite)

@@ -108,43 +108,47 @@ class GTKDecrypt():
         ptk , kek , tk = self.generate_ptk_kek()
         kek = bytes.fromhex(kek)
         encrypt_msg = self.config.encrypt_msg
-        print("生成gtk: ", kek, encrypt_msg)
+        print("KEK : ", kek.hex(), encrypt_msg.hex())
         gtk = aes_key_unwrap(kek, encrypt_msg).hex()[60:-4]
         
         return gtk, tk
 
 
-class Generate_Plain_text():
-    def Plain_text(self, type : str):
-        if type == "dhcp":
-            dhcp_layer = BOOTP( 
-                            op=1,
-                            htype=1,
-                            hlen=6 ,
-                            hops=0 ,
-                            xid=1234 ,
-                            secs=0 ,
-                            flags= b"0000",
-                            ciaddr="0.0.0.0" ,
-                            yiaddr="0.0.0.0" ,
-                            siaddr="0.0.0.0" ,
-                            giaddr="0.0.0.0" ,
-                            chaddr=b"001d4320192d" ,
-                            sname=b'' * 64 ,
-                            file=b'' * 128 ,
-                            options=b'63825363', 
+class Gen_Target_layer():
+    @staticmethod
+    def gen(type : str, mac_self:bytes, router_ip = '192.168.0.1' ):
+        if type == 'DHCP':
+            Target_layer = (
+                            IP(dst="255.255.255.255", src = "0.0.0.0") 
+                            / UDP(sport = 68, dport = 67) 
+                            / BOOTP( 
+                                op=1,
+                                htype=1,
+                                hlen=6 ,
+                                hops=0 ,
+                                xid=1234 ,
+                                secs=0 ,
+                                flags= b"0000",
+                                ciaddr="0.0.0.0" ,              # client ip address
+                                yiaddr="0.0.0.0" ,              # your (client) ip
+                                siaddr="0.0.0.0" ,              # server ip
+                                giaddr="0.0.0.0" ,              # relay agent ip
+                                chaddr=mac_self,                # Client hardware  address 
+                                sname=b'' ,
+                                file=b'' ,
+                                options=b'c\x82Sc',             #  DHCP Magic
+                                ) 
+                            / DHCP(options=[("message-type", "discover"), "end"])
                             )
-            # print(TK , nonce.hex())
-            ip = IP(dst="255.255.255.255", src = "0.0.0.0")
-            udp = UDP(sport = 68, dport = 67)
-            
-            Plain_text = LLC() / SNAP() / ip / udp / dhcp_layer
-        elif type == "arp"    :
-            arp = ARP(hwsrc="00:1d:43:20:19:2d", psrc="192.168.4.222", hwdst="00:00:00:00:00:00", pdst="192.168.4.1")
-            Plain_text = LLC() / SNAP() / arp
+        elif type == 'ARP'    :
+            Target_layer = ARP(hwsrc=mac_self, 
+                                hwdst="00:00:00:00:00:00", 
+                                psrc='0.0.0.0', 
+                                pdst=router_ip
+                                )
         else:
             print("Wrong type ")
-        return Plain_text
+        return Target_layer
     
  
 

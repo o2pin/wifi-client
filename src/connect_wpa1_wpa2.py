@@ -21,7 +21,8 @@ import sys
 from Crypto.Cipher import AES
 
 from .utils_wifi_inject import Monitor, RSN, TKIP_info
-from .utils_wpa1_crypt import Calc_MIC, GTKDecrypt, Generate_Plain_text, CCMPCrypto
+from .utils_wpa1_wpa2_crypt import Calc_MIC, GTKDecrypt
+from .utils_wpa2_arp_dhcp import ONCE_REQ
 
 from socket_hook_py import sendp, send, sniff 
 
@@ -30,8 +31,11 @@ from socket_hook_py import sendp, send, sniff
 TODO:
     1. WPA1 EAPOL m3 中 gtk 解密
     2. 将 WPA3 也合并进来
+    3. 响应路由器在线设备查询, 需要实现不同加密报文场景，如 DHCP Req / IGMP Replay 等
 '''
 
+FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
+logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 class WiFi_Object:
     def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic="", wpa_keyver='WPA2'):
@@ -159,7 +163,7 @@ class eapol_handshake():
                 'm4_keyinfo':0x0109,
                 }
         else:
-            self.eapkey_info = {
+            self.eapkey_info = {        # WPA2
                 'm1_keyinfo':0x008a,    # dec: 138
                 'm2_keyinfo':0x010a,
                 'm3_keyinfo':0x13ca,    # dec: 5066
@@ -247,11 +251,11 @@ class eapol_handshake():
         # print(f'{self.config.encrypt_msg.hex()}')
 
         ## 解密出 gtk
-        # # 暂时注释
-        # gtk_decrypt = GTKDecrypt(self.config)
-        # gtk , tk = gtk_decrypt.get_gtk()
-        # logging.debug("GTK : ".format(gtk))
-        # logging.debug("TK : ".format(tk))
+        if self.config.wpa_keyver == 'WPA2':
+            gtk_decrypt = GTKDecrypt(self.config)
+            gtk , tk = gtk_decrypt.get_gtk()
+            logging.debug(f"GTK : {gtk}")
+            logging.debug(f"TK : {tk}")
 
         # Key (Message 4 of 4)
         logging.info("\n-------------------------Key (Message 4 of 4): ")
@@ -278,18 +282,19 @@ class eapol_handshake():
         # eapol_4_packet.show()
         send(eapol_4_packet, iface = self.config.iface, verbose=0)
 
-        # return tk
-        return 
+        return tk
+        # return 
 
 
 def test(
-        iface = "monwlan3",
+        iface = "monwlan2",
         ssid = "testnetwork",
         psk = "passphrase",
         ap_mac = "02:00:00:00:00:00",
         sta_mac = "02:00:00:00:01:00",
-        scene = 2,
-        wpa_keyver= 'WPA2'
+        scene = 3,
+        wpa_keyver= 'WPA2',
+        router_ip = '192.168.4.1'
 ):
     config = WiFi_Object(
         iface = iface,
@@ -339,56 +344,25 @@ def test(
     if scene == 1:
         sys.exit(0)
 
-    # 密钥协商
     connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info)
     TK = connectionphase_2.run()
-
-    # if len(TK) > 1:
-    #     logging.info("WiFi 握手完成!")
-    # else:
-    #     sys.exit(1)
+    logging.info("WiFi 协商完成!")
+    
     # 场景2 测试密钥协商
     if scene == 2:
-        logging.info("WiFi 协商完成!")
         sys.exit(0)
 
     # # 和 AP 加密通信
-    # logging.info("\n-------------------------Send Request : ")
-    # logging.info(" TK : ".format(TK))
-
-
-
-    # dot11_packet = Dot11(
-    #         type=2,
-    #         subtype=8,
-    #         FCfield=65,
-    #         addr1=config.mac_ap,
-    #         addr2=config.mac_sta,
-    #         addr3=config.ff_mac,
-    #         SC=64)  / Dot11QoS() / Dot11CCMP(ext_iv=1, PN0=1)
-
-    # packet = dot11_packet
-    # PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
-    # qos_priority = "00"       # 0 = tk , 1 = gtk
-    # Nonce = CCMPCrypto.ccmp_get_nonce(priority=qos_priority , addr=config.mac_sta, pn=PN)
-
-    # generate_payload = Generate_Plain_text()
-    # Plain_text : packet = generate_payload.Plain_text("arp")        # arp or dhcp
-    # Plain_text.show()
-    # Plain_text = bytes(Plain_text)
-
-    # cipher = AES.new(bytes.fromhex(TK), AES.MODE_CCM, Nonce, mac_len = 8)
-    # Ciphertext = cipher.encrypt(Plain_text)
-    # logging.info("密文 : {}".format(Ciphertext))
-
-
-
-    # AAD = CCMPCrypto.ccmp_get_aad(p=dot11_packet)
-    # MIC = CCMPCrypto.cbc_mac(key = TK, plaintext=Plain_text,aad=AAD,nonce=Nonce)    # 密文mic
-
-    # encrypt_req = dot11_packet / Ciphertext / Raw(MIC)
-    # encrypt_req.display()
-    # send(encrypt_req, iface = config.iface, verbose=0)
+    if wpa_keyver== 'WPA2':
+        we_will_send = 'ARP' # ARP or DHCP
+        logging.info(f"\n-------------------------Send {we_will_send} Request : ")
+        logging.info(f" TK : {TK}")
+        setattr(config, 'TK', TK)
+        
+        encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
+        
+        sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
+        logging.info(f'We sent 1 {we_will_send} ! ')
 
 if __name__ == "__main__":
     test()
