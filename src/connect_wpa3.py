@@ -546,13 +546,14 @@ def test(
     
     try:
         sae_commit_2 = t1.stop()[0]
-        if sae_commit_2[Dot11Auth].status != 0x0000:
-            logging.error(f'AP refuse our SAE Commit Request.')
-            sys.exit(1)
     except IndexError:
         logging.error('Not Found SAE Auth commit response , is AP alive ?')
         sys.exit(1)
     
+    if sae_commit_2[Dot11Auth].status != 0x0000:
+        logging.error(f'AP refuse our SAE Commit Request.')
+        sys.exit(1)
+        
     dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
     # dot11_sae.show()
     kck, pmk = sae.process_commit(dot11_sae)
