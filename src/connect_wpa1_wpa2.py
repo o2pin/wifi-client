@@ -27,7 +27,7 @@ TODO:
     3. 响应路由器在线设备查询, 需要实现不同加密报文场景，如 DHCP Req / IGMP Replay 等
 '''
 
-FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
+FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 class WiFi_Object:
@@ -288,7 +288,7 @@ def test(
         sta_mac = "02:00:00:00:01:00",
         scene = 3,
         wpa_keyver= 'WPA2',
-        we_will_send = 'DHCP',
+        we_will_send = 'ARP',
         router_ip = '192.168.4.1'
 ):
     config = WiFi_Object(

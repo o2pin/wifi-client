@@ -8,9 +8,9 @@ from src import \
     connect_wpa1_wpa2 as wpa1_wpa2
 
 
-
-FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
-logging.basicConfig(level = logging.DEBUG, format=FORMAT)
+# FORMAT = "%(asctime)s.%(msecs)d %(levelname)-8s [%(processName)s] [%(threadName)s] %(filename)s:%(lineno)d --- %(message)s"
+FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+logging.basicConfig(level = logging.ERROR, format=FORMAT)
 
 # Metadata.
 NAME = "Wi-Fi Fuzz"

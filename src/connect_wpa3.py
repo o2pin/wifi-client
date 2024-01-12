@@ -11,6 +11,7 @@ from Crypto.Math.Numbers import Integer
 from scapy.layers.dot11 import (
     Dot11Auth,
     Dot11Deauth,
+    Dot11AssoResp,
     Dot11,
     Dot11CCMP,
     RadioTap,
@@ -36,6 +37,14 @@ from .utils_wifi_inject import Dot11EltRates
 from socket_hook_py import sendp, sniff 
 
 # ----------------------- Utility ---------------------------------
+# # FORMAT = '%(asctime)s::%(filename)s:%(lineno)d:%(funcName)s ---- %(message)s'
+# FORMAT = "%(asctime)s.%(msecs)d %(levelname)-8s [%(processName)s] [%(threadName)s] %(filename)s:%(lineno)d --- %(message)s"
+FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+logging.basicConfig(level = logging.DEBUG, format=FORMAT)
+
+scene_auth = 0
+scene_asso = 1
+scene_4_way_handshake = 2
 
 class SAE(Packet):
     name = "SAE"
@@ -214,6 +223,9 @@ def build_sae_confirm(srcaddr, dstaddr, send_confirm, confirm):
     return p/Raw(struct.pack("<H", send_confirm) + confirm)
 
 
+def self_send(Packet, iface):
+    sendp(Packet, iface = iface, verbose=0)
+
 class SAEHandshake():
     def __init__(self, password, srcaddr, dstaddr):
         self.password = password
@@ -262,8 +274,8 @@ class SAEHandshake():
                                  int_to_data((self.scalar + self.peer_scalar) % secp256r1_r), 512)
         self.kck = kck_and_pmk[0:32]
         self.pmk = kck_and_pmk[32:]
-        # print("KCK : ", self.kck)
-        # print("PMK : ", self.pmk)
+        # logging.debug(f"KCK : {}", self.kck)
+        # logging.debug(f"PMK : {}", self.pmk)
 
         return self.kck, self.pmk
 
@@ -272,7 +284,7 @@ class SAEHandshake():
         confirm = calculate_confirm_hash(self.kck, send_confirm, self.scalar, self.element, self.peer_scalar, self.peer_element)
 
         auth = build_sae_confirm(self.srcaddr, self.dstaddr, send_confirm, confirm)
-        sendp(RadioTap()/auth, iface=iface)
+        self_send(RadioTap()/auth, iface=iface)
 
     def process_confirm(self, p):
         payload = str(p[Dot11Auth].payload)
@@ -397,8 +409,7 @@ class eapol_handshake():
         replay_counter = eapol_1_packet[WPA_key].replay_counter
         # 提取 anonce
         self.config.anonce = eapol_1_packet[WPA_key].nonce
-        print("Anonce : ", (self.config.anonce).hex())
-        logging.debug("ANonce {}".format((self.config.anonce).hex()))
+        logging.debug(f"ANonce {(self.config.anonce).hex()}")
 
         # Key (Message 2 of 4)
         logging.debug("-------------------------Key (Message 2 of 4): ")
@@ -411,12 +422,12 @@ class eapol_handshake():
                         nonce=self.config.snonce,
                         wpa_key_length = 28,        # rsn_info 增加了group manag cipher suite
                         wpa_key=self.rsn_info)
-        print("eapol_2_blank : ", bytes(eapol_2).hex())
+        # logging.debug("eapol_2_blank : ", bytes(eapol_2).hex())
         self.config.payload = bytes(eapol_2)
 
         calc_mic = Calc_MIC()
         self.config.ptk, self.config.mic = calc_mic.run(self.config)
-        # print(self.config.mic)
+        # logging.debug(self.config.mic)
         eapol_2[WPA_key].wpa_key_mic = bytes.fromhex(self.config.mic)
 
         eapol_2_packet = RadioTap() / Dot11(
@@ -429,7 +440,7 @@ class eapol_handshake():
                                 SC=32 )  / Dot11QoS() / LLC() / SNAP() / eapol_2
         # eapol_2_packet.show()
         conf.use_pcap = True
-        sendp(eapol_2_packet, iface = self.config.iface)
+        self_send(eapol_2_packet, iface = self.config.iface)
 
         # Key (Message 3 of 4)
         logging.debug("\n-------------------------Key (Message 3 of 4): ")
@@ -440,28 +451,28 @@ class eapol_handshake():
                          timeout=1)
 
         if len(result) > 0:
-            print("成功捕获到 EAPOl Message 3 of 4")
+            logging.info("成功捕获到 EAPOl Message 3 of 4")
         else:
-            print("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
+            logging.error("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
             sys.exit(1)
         eapol_3_packet = result[-1]
         # eapol_3_sequence = eapol_3_packet.payload.SC
         self.config.encrypt_msg = eapol_3_packet[WPA_key].wpa_key
         replay_counter = eapol_3_packet[WPA_key].replay_counter
-        print("Encrypt Msg : ", self.config.encrypt_msg.hex())
+        logging.debug(f'Encrypt Msg : {self.config.encrypt_msg.hex()}')
 
         # 解密出 gtk , 需要修改
         # try:
         #     gtk_decrypt = GTKDecrypt(self.config)
         #     gtk , tk = gtk_decrypt.get_gtk()
-        #     print("GTK : ", gtk)
-        #     print("TK : ", tk)
+        #     logging.debug(f'GTK : {gtk}')
+        #     logging.debug(f"TK : { tk }")
         # except:
-        #     print("GTK 计算异常")
+        #     logging.debug(f"GTK 计算异常")
 
 
         # Key (Message 4 of 4)
-        print("\n-------------------------\nKey (Message 4 of 4): ")
+        logging.info(f"\n-------------------------\nKey (Message 4 of 4): ")
         eapol_4 = EAPOL(version=1,
                         type=3,
                         len =95) / WPA_key(descriptor_type=2,
@@ -471,8 +482,8 @@ class eapol_handshake():
         self.config.payload = bytes(eapol_4)
         calc_mic2 = Calc_MIC()
         ptk, MIC_2 = calc_mic2.run(self.config)
-        # print(self.config.payload.hex())
-        # print(MIC_2)
+        # logging.debug(fself.config.payload.hex())
+        # logging.debug(fMIC_2)
         eapol_4[WPA_key].wpa_key_mic = bytes.fromhex(MIC_2)
         eapol_4_packet = RadioTap() / Dot11(
             type=2,
@@ -483,7 +494,7 @@ class eapol_handshake():
             addr3=self.config.mac_ap,
             SC=48)  / Dot11QoS() / LLC() / SNAP() / eapol_4
         # eapol_4_packet.show()
-        sendp(eapol_4_packet, iface = self.config.iface)
+        self_send(eapol_4_packet, iface = self.config.iface)
 
         return self.config.ptk
 
@@ -513,35 +524,46 @@ def test(
         payload = "",
     )
     
-    logging.debug(config.__dict__)
+    # logging.debug(config.__dict__)
     
+    # # SAE
     sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
 
     sae_commit_1 = sae.send_commit()
     t1 = AsyncSniffer(iface=iface, 
-                      lfilter=lambda x: x[Dot11].addr1==sta_mac and x.haslayer(Dot11Auth) and x.getlayer(Dot11Auth).seqnum == 1, 
-                      prn=lambda r: print(r.summary())
+                      lfilter=lambda x: (
+                          x[Dot11].addr1==config.mac_sta 
+                          and x[Dot11].addr2==config.mac_ap 
+                          and x.haslayer(Dot11Auth) 
+                          and x.getlayer(Dot11Auth).seqnum == 1
+                          ),
+                    #   prn=lambda r: logging.debug(fr.summary())
                       )
     t1.start()
+    time.sleep(0.1)
+    self_send(RadioTap() / sae_commit_1 ,iface=iface)
     time.sleep(0.2)
-    sendp(RadioTap() / sae_commit_1 ,iface=iface)
-    # time.sleep(0.5)
     
     try:
         sae_commit_2 = t1.stop()[0]
+        if sae_commit_2[Dot11Auth].status != 0x0000:
+            logging.error(f'AP refuse our SAE Commit Request.')
+            sys.exit(1)
     except IndexError:
-        logging.error('Not Found SAE Auth commit response .')
+        logging.error('Not Found SAE Auth commit response , is AP alive ?')
         sys.exit(1)
     
     dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
     # dot11_sae.show()
     kck, pmk = sae.process_commit(dot11_sae)
-    print("KCK", kck.hex())
-    print("PMK", pmk.hex())
+    logging.debug(f"KCK {kck.hex()}")
+    logging.debug(f"PMK {pmk.hex()}")
     sae.send_confirm(iface=iface)
-    if scene == 0:
+    if scene == scene_auth:
+        logging.info(f'Success scene {scene_auth} : scene_auth.')
         sys.exit(0)
 
+    # # Association
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()
     packet = Dot11(
@@ -560,15 +582,29 @@ def test(
     assocation_1 = RadioTap() / packet
 
     # sniff 关联响应 association response
-    # t1 = AsyncSniffer(iface=config.iface, lfilter=lambda x: x[Dot11].addr1==config.mac_sta and x.getlayer(Dot11AssoResp).seqnum == 1)
-    # t1.start()
-    # time.sleep(0.2)
-    sendp(assocation_1, iface=iface)
-    if scene == 1:
-        sys.exit(0)
-    # time.sleep(0.1)
-    # result = t1.stop()[0]
+    t2 = AsyncSniffer(iface=config.iface, 
+                      lfilter=lambda x: (
+                                    x[Dot11].addr1==config.mac_sta 
+                                    and x[Dot11].addr2==config.mac_ap 
+                                    and x.haslayer(Dot11AssoResp)
+                                    and x.getlayer(Dot11AssoResp).status == 0x0000
+                                        )
+                      )
+    t2.start()
+    time.sleep(0.1)
+    self_send(assocation_1, iface=iface)
+    time.sleep(0.2)
+    try:
+        result = t2.stop()[0]
+    except IndexError:
+        logging.error('Not Found Association Response .')
+        sys.exit(1)
 
+    if scene == scene_asso:
+        logging.info(f'Success scene {scene_asso} : scene_asso.')
+        sys.exit(0)
+        
+        
     # 密钥协商
     config = WiFi_Object(
             iface = iface,
@@ -586,12 +622,15 @@ def test(
 
     EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
     PTK = EAPOL_connect.run()
+    if scene == scene_4_way_handshake:
+        logging.info(f'Success scene {scene_4_way_handshake} : scene_4_way_handshake.')
+        sys.exit(0)
 
     # 断开认证
-    print("\n-------------------------\n从AP离开: ")
+    logging.info(f"\n-------------------------\n从AP离开: ")
     TK : bytes = PTK[-16:]
     Plain_text = bytes(Dot11Deauth(reason=3))
-    # print("TK & Plain_text : ", TK.hex(), Plain_text.hex())
+    # logging.debug(f'TK & Plain_text : {TK.hex(), Plain_text.hex()}')
     dot11_packet = ( 
                     Dot11(type=0, subtype=12, FCfield="protected",
                          addr1=config.mac_ap, 
@@ -599,23 +638,23 @@ def test(
                          addr3=config.mac_ap
                          ) / 
                     Dot11CCMP(ext_iv=1, PN0=4))
-    # print("Dot11 Layer", bytes(dot11_packet).hex())
+    # logging.debug(f'Dot11 Layer : { bytes(dot11_packet).hex() } ')
     packet = dot11_packet
     PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
     Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_sta,pn=PN)
     cipher = AES.new(TK, AES.MODE_CCM, Nonce, mac_len = 8)
     deauth_cipher = cipher.encrypt(Plain_text)
-    # print("deauth_cipher : ", deauth_cipher.hex())
+    # logging.debug(f"deauth_cipher : { deauth_cipher.hex()}")
     aad = CCMPCrypto.ccmp_get_aad(dot11_packet, amsdu_spp=False)
     MIC = CCMPCrypto.cbc_mac(TK, Plain_text, aad, Nonce)
-    # print("Deauth MIC : ", MIC.hex())
+    # logging.debug(f"Deauth MIC : { MIC.hex()}")
     wpa3_deauth = ( 
                     RadioTap() / 
                     dot11_packet / 
                     Raw(deauth_cipher) / 
                     Raw(MIC)
                     )
-    sendp(wpa3_deauth, iface = config.iface)
+    self_send(wpa3_deauth, iface = config.iface)
 
 
 if __name__ == "__main__":

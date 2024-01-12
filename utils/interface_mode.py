@@ -6,7 +6,7 @@ import re
 import time
 from scapy.arch import str2mac, get_if_raw_hwaddr
 
-FORMAT = '%(asctime)s::%(filename)s:%(funcName)s:%(lineno)d ---- %(message)s'
+FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 

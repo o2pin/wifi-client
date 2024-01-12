@@ -60,11 +60,11 @@ class Calc_MIC():
     #     MIC_raw = hmac.new(MCI_Key, payload, hashlib.sha256).hexdigest()
     #     MIC = MIC_raw[:32]
     #     print("MIC : " + MIC)
-        
-        return MIC
+    #     return MIC
+    
     def calculate_WPA3_MIC(self, ptk:bytes, payload:bytes):
         MIC_Key = ptk[:16]
-        # print("计算MIC处: ",ptk,  MIC_Key.hex(), payload.hex())
+        # print("计算MIC处: ",ptk.hex(),  MIC_Key.hex(), payload.hex())
         cobj = CMAC.new(MIC_Key, ciphermod=AES)
         cobj.update( payload)
         MIC = cobj.hexdigest()
