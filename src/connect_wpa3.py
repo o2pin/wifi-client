@@ -624,10 +624,7 @@ def test(
 
         EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
         PTK = EAPOL_connect.run()
-        if scene == scene_4_way_handshake:
-            logging.info(f'Success scene {scene_4_way_handshake} : scene_4_way_handshake.')
-            sys.exit(0)
-    finally:
+        
         # 断开认证
         logging.info(f"\n-------------------------\n从AP离开: ")
         TK : bytes = PTK[-16:]
@@ -657,6 +654,12 @@ def test(
                         Raw(MIC)
                         )
         self_send(wpa3_deauth, iface = config.iface)
+        if scene == scene_4_way_handshake:
+            logging.info(f'Success scene {scene_4_way_handshake} : scene_4_way_handshake.')
+            sys.exit(0)
+    finally:
+        pass
+        # # WPA3 的 deauth 经过了加密，也就是必须完成完整协商才能 deauth
 
     return
 
