@@ -26,7 +26,7 @@ from scapy.sendrecv import sendp, send, sniff, AsyncSniffer
 from scapy import config as scapyconfig
 
 
-# from socket_hook_py import sendp, send, sniff 
+from socket_hook_py import sendp, send, sniff 
 class Dot11EltRates(Packet):
     """
     Our own definition for the supported rates field
@@ -161,14 +161,19 @@ class Monitor:
         logging.info("Scanning max 1 seconds for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
-              stop_filter=self.check_auth, timeout=1, prn = lambda x: logging.debug(x))
+              stop_filter=self.check_auth, timeout=1, 
+            #   prn = lambda x: logging.debug(x)
+              )
         mp_queue.put(self.auth_found)
 
     def search_assoc_resp(self, mp_queue):
         logging.info("Scanning max 1 seconds for Association Response "
               "from BSSID {0}".format(self.bssid))
-        sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11AssoResp),
-              stop_filter=self.check_assoc, timeout=1, prn = lambda x: logging.debug(x))
+        sniff(iface=self.mon_ifc, 
+              lfilter=lambda x: x.haslayer(Dot11AssoResp),
+              stop_filter=self.check_assoc, timeout=1, 
+            #   prn = lambda x: logging.debug(x)
+              )
         mp_queue.put(self.assoc_found)
 
 

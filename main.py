@@ -30,8 +30,9 @@ def main():
     logging.info(opt)
     logging.info('start main')  # will not print anything
     
+    sta_mac = opt.sta_mac if opt.sta_mac else get_iface_mac(opt.iface)
     iface = ensure_interface_mode(opt.iface)
-    sta_mac = opt.sta_mac if opt.sta_mac else get_iface_mac(iface)
+    
 
     if opt.suite == "WPA3":
         logging.info("WPA3 test suite")
