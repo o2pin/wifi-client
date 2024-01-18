@@ -311,67 +311,67 @@ def test(
     else:
         vendor_info = RSN.get_rsn_info()
     conf.iface = config.iface       # scapy.config.conf.iface
+
+    monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower())
+    connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
+
+    # 链路认证
+    logging.info("\n-------------------------Link Authentication Request : ")
+    connectionphase_1.send_authentication()
+
+    if connectionphase_1.state == "Authenticated":
+        logging.info("STA is authenticated to the AP!")
+    else:
+        logging.info("STA is NOT authenticated to the AP!")
+        sys.exit(1)
+    # 场景0 测试认证过程
+    if scene == 0:
+        sys.exit(0)
+
+    # 链路关联
+    logging.info("\n-------------------------Link Assocation Request : ")
+    connectionphase_1.send_assoc_request(ssid=config.ssid, vendor_info=vendor_info)
+
+    if connectionphase_1.state == "Associated":
+        logging.info("STA is connected to the AP!")
+    else:
+        logging.info("STA is NOT connected to the AP!")
+        sys.exit(1)
+    # 场景1 测试关联过程
+    if scene == 1:
+        sys.exit(0)
+
+    connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info)
+    TK = connectionphase_2.run()
+    logging.info("WiFi 协商完成!")
     
-    try:
-        monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower())
-        connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
+    # 场景2 测试密钥协商
+    if scene == 2:
+        sys.exit(0)
 
-        # 链路认证
-        logging.info("\n-------------------------Link Authentication Request : ")
-        connectionphase_1.send_authentication()
-
-        if connectionphase_1.state == "Authenticated":
-            logging.info("STA is authenticated to the AP!")
-        else:
-            logging.info("STA is NOT authenticated to the AP!")
-            sys.exit(1)
-        # 场景0 测试认证过程
-        if scene == 0:
-            sys.exit(0)
-
-        # 链路关联
-        logging.info("\n-------------------------Link Assocation Request : ")
-        connectionphase_1.send_assoc_request(ssid=config.ssid, vendor_info=vendor_info)
-
-        if connectionphase_1.state == "Associated":
-            logging.info("STA is connected to the AP!")
-        else:
-            logging.info("STA is NOT connected to the AP!")
-            sys.exit(1)
-        # 场景1 测试关联过程
-        if scene == 1:
-            sys.exit(0)
-
-        connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info)
-        TK = connectionphase_2.run()
-        logging.info("WiFi 协商完成!")
+    # # 和 AP 加密通信
+    if wpa_keyver== 'WPA2':
+        logging.info(f"\n-------------------------Send {we_will_send} Request : ")
+        logging.info(f" TK : {TK}")
+        setattr(config, 'TK', TK)
         
-        # 场景2 测试密钥协商
-        if scene == 2:
-            sys.exit(0)
-
-        # # 和 AP 加密通信
-        if wpa_keyver== 'WPA2':
-            logging.info(f"\n-------------------------Send {we_will_send} Request : ")
-            logging.info(f" TK : {TK}")
-            setattr(config, 'TK', TK)
-            
-            encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
-            
-            sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
-            logging.info(f'We sent 1 {we_will_send} . ')
-    finally:
-        # # 从 AP 离开
-        deauth = Dot11(
-                addr1=config.mac_ap,
-                addr2=config.mac_sta,
-                addr3=config.mac_ap,
-                SC=16 * 5) / Dot11Deauth(reason=3)
-        sendp(RadioTap() / deauth, iface = config.iface, verbose=0)
-        logging.info(f'Leave from AP.')
+        encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
         
-        return
-    
+        sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
+        logging.info(f'We sent 1 {we_will_send} . ')
+        
+    # # 从 AP 离开
+    deauth = Dot11(
+            addr1=config.mac_ap,
+            addr2=config.mac_sta,
+            addr3=config.mac_ap,
+            SC=16 * 5) / Dot11Deauth(reason=3)
+    sendp(RadioTap() / deauth, iface = config.iface, verbose=0)
+    logging.info(f'Leave from AP.')
+        
+    # 场景3 加密通信
+    if scene == 3:
+        sys.exit(0)
     
     
 if __name__ == "__main__":
