@@ -28,7 +28,7 @@ TODO:
     3. 响应路由器在线设备查询, 需要实现不同加密报文场景，如 DHCP Req / IGMP Replay 等
 '''
 
-FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 class WiFi_Object:

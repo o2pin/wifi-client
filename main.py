@@ -9,7 +9,7 @@ from src import \
 
 
 # FORMAT = "%(asctime)s.%(msecs)d %(levelname)-8s [%(processName)s] [%(threadName)s] %(filename)s:%(lineno)d --- %(message)s"
-FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.ERROR, format=FORMAT)
 
 # Metadata.
