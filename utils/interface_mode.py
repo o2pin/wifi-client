@@ -6,8 +6,8 @@ import re
 import time
 from scapy.arch import str2mac, get_if_raw_hwaddr
 
-FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
-logging.basicConfig(level = logging.DEBUG, format=FORMAT)
+# FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+# logging.basicConfig(level = logging.DEBUG)
 
 
 def get_iface_type(iface):

