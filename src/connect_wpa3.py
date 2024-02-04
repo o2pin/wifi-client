@@ -12,6 +12,7 @@ from scapy.layers.dot11 import (
     Dot11Auth,
     Dot11Deauth,
     Dot11AssoResp,
+    Dot11ProbeResp,
     Dot11,
     Dot11CCMP,
     RadioTap,
@@ -533,10 +534,31 @@ def test(
     # logging.debug(config.__dict__)
     
     # 探测请求
-    pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.ff_mac, source_addr=config.mac_sta)
-    sendp(pr, iface=config.iface, verbose=0)
     if scene == Scene.probeReq:
-        sys.exit(0)
+        logging.info(f'Start Probe request.')
+        pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+        
+        t1 = AsyncSniffer(iface=config.iface,
+                            lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                and r.haslayer(Dot11ProbeResp) 
+                                                and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                ) ,
+                            # prn = lambda r: r.summary(),
+                            store=1, 
+                            #  count=1,    # when AsyncSniffer , don't count
+                            timeout=1)
+        t1.start()
+        time.sleep(0.06)
+        sendp(pr, iface=config.iface, verbose=0)
+        result = t1.stop()
+        
+        if len(result) > 0:
+            logging.info(f'Success recv Probe response.')
+            if scene == Scene.probeReq:
+                sys.exit(0)
+        else:
+            logging.error(f'Not found Probe response.')
+            sys.exit(1)
     
     # # SAE
     # 链路认证
