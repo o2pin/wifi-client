@@ -3,6 +3,7 @@ import logging, multiprocessing, time, sys
 from scapy.layers.dot11 import (
     Dot11Auth,
     Dot11Deauth,
+    Dot11ProbeResp,
     Dot11,
     RadioTap,
     Dot11AssoReq,
@@ -14,12 +15,13 @@ from scapy.layers.dot11 import (
 from scapy.layers.l2    import SNAP
 from scapy.contrib.wpa_eapol import WPA_key, EAPOL
 from scapy.utils import randstring
+from scapy.sendrecv import AsyncSniffer, sniff, send, sendp
 
 from .utils_wifi_inject import Monitor, RSN, TKIP_info, ProbeReq
 from .utils_wpa1_wpa2_crypt import Calc_MIC, GTKDecrypt
 from .utils_wpa2_arp_dhcp import ONCE_REQ
 
-from socket_hook_py import sendp, send, sniff 
+from socket_hook_py import sendp, send, sniff , AsyncSniffer
 
 # ----------------------- Utility ---------------------------------
 '''
@@ -183,7 +185,7 @@ class eapol_handshake():
                                             and r.getlayer(WPA_key).key_info  == self.eapkey_info['m1_keyinfo']
                                             # and (r.getlayer(WPA_key).key_info  == 0x0089)) ,
                                             ) ,
-                         count=1, store=1, timeout=2, 
+                         count=1, store=1, timeout=1, 
                         #  prn = lambda x: logging.debug(x)
                          )
         if len(eapol_p1) > 0:
@@ -325,10 +327,31 @@ def test(
     connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
 
     # 探测请求
-    pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
-    sendp(pr, iface=config.iface, verbose=0)
     if scene == Scene.probeReq:
-        sys.exit(0)
+        logging.info(f'Start Probe request.')
+        pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+        
+        t1 = AsyncSniffer(iface=config.iface,
+                            lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                and r.haslayer(Dot11ProbeResp) 
+                                                and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                ) ,
+                            # prn = lambda r: r.summary(),
+                            store=1, 
+                            #  count=1,    # when AsyncSniffer , don't count
+                            timeout=1)
+        t1.start()
+        time.sleep(0.06)
+        sendp(pr, iface=config.iface, verbose=0)
+        result = t1.stop()
+        
+        if len(result) > 0:
+            logging.info(f'Success recv Probe response.')
+            if scene == Scene.probeReq:
+                sys.exit(0)
+        else:
+            logging.error(f'Not found Probe response.')
+            sys.exit(0)
         
     # 链路认证
     logging.info("\n-------------------------Link Authentication Request : ")
