@@ -1,7 +1,7 @@
 import logging
 from scapy.layers.dot11 import (
     Dot11Auth,
-    Dot11Deauth,
+    Dot11ProbeReq,
     Dot11,
     Dot11EltMicrosoftWPA,
     Dot11AssoResp,
@@ -18,16 +18,16 @@ from scapy.layers.dot11 import (
     )
 from scapy.layers.eap import EAPOL
 from scapy.contrib.wpa_eapol import *
-from scapy.layers.dot11 import Dot11Auth, Dot11, RadioTap
+from scapy.layers.dot11 import Dot11Auth, Dot11, RadioTap, Dot11EltRates
 from scapy.layers.l2 import LLC, SNAP
 from scapy.fields import *
 from scapy.arch import str2mac, get_if_raw_hwaddr
 from scapy.sendrecv import sendp, send, sniff, AsyncSniffer
 from scapy import config as scapyconfig
 
-
 from socket_hook_py import sendp, send, sniff 
-class Dot11EltRates(Packet):
+
+class Dot11EltRates_mod(Packet):
     """
     Our own definition for the supported rates field
     """
@@ -47,16 +47,16 @@ class Dot11EltRates(Packet):
 
 class RSN():
     @staticmethod
-    def get_rsn_info():
+    def get_rsn_info(akmsuite=2, mfp_capable=0, mfp_required=0):
         rsn_info = Dot11EltRSN(
                 len=22,         # len=22  smyl    /      len=20   xiaomi hotspot
                 group_cipher_suite=RSNCipherSuite(),
                 nb_pairwise_cipher_suites=1,
                 pairwise_cipher_suites=[RSNCipherSuite()],
                 nb_akm_suites=1,
-                akm_suites=[AKMSuite(suite=2)], # 重要, =2 代表 psk
-                mfp_capable=0,                  # 管理帧保护, =1 or =0, 受保护的管理帧强制对断开连接帧进行加密
-                mfp_required=0 ,
+                akm_suites=[AKMSuite(suite=akmsuite)], # 重要, =2 代表 psk
+                mfp_capable=mfp_capable,                  # 管理帧保护, =1 or =0, 受保护的管理帧强制对断开连接帧进行加密
+                mfp_required=mfp_required ,
                 gtksa_replay_counter=0 ,
                 ptksa_replay_counter=0
                 )
@@ -93,7 +93,7 @@ class Monitor:
         self.assoc_found = False
         self.eapol_1 = False
         self.eapol_3_found = False
-        self.dot11_rates = Dot11EltRates()
+        self.dot11_rates = Dot11EltRates_mod()
 
     # def ack(self, dest_mac):
     #     dot11 = Dot11(type=1, subtype=13, addr1=dest_mac)
@@ -177,4 +177,22 @@ class Monitor:
         mp_queue.put(self.assoc_found)
 
 
+class ProbeReq():
 
+    @staticmethod
+    def gen_Probe_req(dest_addr, source_addr, ssid=''):
+        dot11_lay = Dot11(
+            type=0, 
+            subtype=4, 
+            addr1=dest_addr, 
+            addr2=source_addr, 
+            addr3=dest_addr)
+        probe_req = Dot11ProbeReq()
+        ssid_info = Dot11Elt(ID='SSID', info=ssid, len=len(ssid))
+        
+        frame = RadioTap() / dot11_lay / probe_req / \
+                ssid_info / Dot11EltRates(rates=[
+                    0x82, 0x84, 0x8b, 0x96, # 80211b
+                    0x8c, 0x12, 0x18, 0x24, 0xc2, 0x48, 0x60, 0x6c  # 80211g 支持列表
+                    ]) 
+        return frame

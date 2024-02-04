@@ -15,12 +15,13 @@ from scapy.layers.l2    import SNAP
 from scapy.contrib.wpa_eapol import WPA_key, EAPOL
 from scapy.utils import randstring
 
-from .utils_wifi_inject import Monitor, RSN, TKIP_info
+from .utils_wifi_inject import Monitor, RSN, TKIP_info, ProbeReq
 from .utils_wpa1_wpa2_crypt import Calc_MIC, GTKDecrypt
 from .utils_wpa2_arp_dhcp import ONCE_REQ
+
 from socket_hook_py import sendp, send, sniff 
 
-
+# ----------------------- Utility ---------------------------------
 '''
 TODO:
     1. WPA1 EAPOL m3 中 gtk 解密
@@ -28,7 +29,15 @@ TODO:
     3. 响应路由器在线设备查询, 需要实现不同加密报文场景，如 DHCP Req / IGMP Replay 等
 '''
 
-FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
+class Scene:
+    probeReq = 0
+    auth = 1
+    asso = 2
+    four_way_handshake = 3
+    talktoap = 4
+    deauth = 5
+    
+FORMAT = "[%(filename)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 class WiFi_Object:
@@ -315,6 +324,12 @@ def test(
     monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower())
     connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
 
+    # 探测请求
+    pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+    sendp(pr, iface=config.iface, verbose=0)
+    if scene == Scene.probeReq:
+        sys.exit(0)
+        
     # 链路认证
     logging.info("\n-------------------------Link Authentication Request : ")
     connectionphase_1.send_authentication()
@@ -324,8 +339,8 @@ def test(
     else:
         logging.info("STA is NOT authenticated to the AP!")
         sys.exit(1)
-    # 场景0 测试认证过程
-    if scene == 0:
+    # 场景 链路认证
+    if scene == Scene.auth:
         sys.exit(0)
 
     # 链路关联
@@ -337,16 +352,16 @@ def test(
     else:
         logging.info("STA is NOT connected to the AP!")
         sys.exit(1)
-    # 场景1 测试关联过程
-    if scene == 1:
+    # 场景 测试关联过程
+    if scene == Scene.asso:
         sys.exit(0)
 
     connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info)
     TK = connectionphase_2.run()
     logging.info("WiFi 协商完成!")
     
-    # 场景2 测试密钥协商
-    if scene == 2:
+    # 场景 测试密钥协商
+    if scene == Scene.four_way_handshake:
         sys.exit(0)
 
     # # 和 AP 加密通信
@@ -360,6 +375,11 @@ def test(
         sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
         logging.info(f'We sent 1 {we_will_send} . ')
         
+    # 场景 加密通信
+    if scene == Scene.talktoap:
+        sys.exit(0)
+    
+    
     # # 从 AP 离开
     deauth = Dot11(
             addr1=config.mac_ap,
@@ -369,8 +389,8 @@ def test(
     sendp(RadioTap() / deauth, iface = config.iface, verbose=0)
     logging.info(f'Leave from AP.')
         
-    # 场景3 加密通信
-    if scene == 3:
+    # 场景 deauth
+    if scene == Scene.deauth:
         sys.exit(0)
     
     

