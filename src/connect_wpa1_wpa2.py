@@ -351,7 +351,7 @@ def test(
                 sys.exit(0)
         else:
             logging.error(f'Not found Probe response.')
-            sys.exit(0)
+            sys.exit(1)
         
     # 链路认证
     logging.info("\n-------------------------Link Authentication Request : ")
