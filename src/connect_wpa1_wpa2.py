@@ -1,4 +1,5 @@
 import logging, multiprocessing, time, sys
+import hmac, hashlib
 
 from scapy.layers.dot11 import (
     Dot11Auth,
@@ -9,13 +10,16 @@ from scapy.layers.dot11 import (
     Dot11AssoReq,
     Dot11Elt,
     Dot11QoS,
+    Dot11TKIP,
     LLC,
     conf
     )
 from scapy.layers.l2    import SNAP
 from scapy.contrib.wpa_eapol import WPA_key, EAPOL
-from scapy.utils import randstring
+from scapy.utils import randstring, mac2str
 from scapy.sendrecv import AsyncSniffer, sniff, send, sendp
+from scapy.modules.krack.crypto import parse_data_pkt, build_TKIP_payload, build_MIC_ICV,ARC4_decrypt, ARC4_encrypt, customPRF512
+
 
 from .utils_wifi_inject import Monitor, RSN, TKIP_info, ProbeReq
 from .utils_wpa1_wpa2_crypt import Calc_MIC, GTKDecrypt
@@ -166,6 +170,8 @@ class eapol_handshake():
                 'm2_keyinfo':0x0109,
                 'm3_keyinfo':0x01c9,
                 'm4_keyinfo':0x0109,
+                'group1_keyinfo':0x0391,
+                'group2_keyinfo':0x0311,
                 }
         else:
             self.eapkey_info = {        # WPA2
@@ -177,7 +183,7 @@ class eapol_handshake():
 
     def run(self):
         # Key (Message 1 of 4)
-        logging.info("\n-------------------------Key (Message 1 of 4): ")
+        logging.info("-------------------------Key (Message 1 of 4): ")
         eapol_p1 = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(Dot11) 
                                             and r[Dot11].addr1 == self.config.mac_sta 
@@ -195,8 +201,6 @@ class eapol_handshake():
             sys.exit(1)
         # # 提取 802.11 层 sequence
         # dot11_seq = eapol_p1[0].payload.SC
-        # eapol_1_layer = eapol_p1[0].payload.payload.payload.payload
-        # RadioTap / Dot11 / LLC / SNAP / EAPOL EAPOL-Key + **Raw**
         eapol_1_packet = eapol_p1[0][EAPOL]
         replay_counter = eapol_1_packet[WPA_key].replay_counter
         # 提取 anonce
@@ -215,12 +219,21 @@ class eapol_handshake():
                         nonce=self.config.snonce,
                         wpa_key_length = 24,
                         wpa_key=self.vendor_info)
-        logging.debug(f"eapol_2_blank : {bytes(eapol_2).hex()}")
+        # logging.debug(f"eapol_2_blank : {bytes(eapol_2).hex()}")
         self.config.payload = bytes(eapol_2)
 
         calc_mic = Calc_MIC(wpa_keyver=self.config.wpa_keyver)      # WPA1 or WPA2; default WPA2
         self.config.pmk, self.config.ptk, self.config.mic = calc_mic.run(self.config)
         eapol_2[WPA_key].wpa_key_mic = bytes.fromhex(self.config.mic)
+        ## 新的计算ptk方式
+        amac = mac2str(self.config.mac_ap)
+        smac = mac2str(self.config.mac_sta)
+
+        # Compute PTK
+        ptk = customPRF512(self.config.pmk, amac, smac, self.config.anonce, self.config.snonce)
+        logging.debug(f"ptk new : {ptk.hex()}")
+        setattr(self, 'ptk', ptk)
+        
 
         eapol_2_packet = Dot11(
                                 type=2,
@@ -234,7 +247,7 @@ class eapol_handshake():
         send(eapol_2_packet, iface = self.config.iface, verbose=0)
 
         # Key (Message 3 of 4)
-        logging.info("\n-------------------------Key (Message 3 of 4): ")
+        logging.info("-------------------------Key (Message 3 of 4): ")
 
         result = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) 
@@ -248,23 +261,27 @@ class eapol_handshake():
         else:
             logging.info("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
             sys.exit(1)
+            
         eapol_3_packet = result[-1]
-        # eapol_3_sequence = eapol_3_packet.payload.SC
-        self.config.encrypt_msg = eapol_3_packet[WPA_key].wpa_key
         replay_counter = eapol_3_packet[WPA_key].replay_counter
-        logging.debug(f"Encrypt Msg : {(self.config.encrypt_msg).hex()}")
-        # print(f'{self.config.encrypt_msg.hex()}')
-
-        ## 解密出 gtk
-        tk = None
+        
         if self.config.wpa_keyver == 'WPA2':
+            self.config.encrypt_msg = eapol_3_packet[WPA_key].wpa_key
+            logging.debug(f"Encrypt Msg : {(self.config.encrypt_msg).hex()}")
+            # print(f'{self.config.encrypt_msg.hex()}')
+
+            ## 解密出 gtk
+            tk = None
             gtk_decrypt = GTKDecrypt(self.config)
             gtk , tk = gtk_decrypt.get_gtk()
             logging.debug(f"GTK : {gtk}")
             logging.debug(f"TK : {tk}")
-
+        elif self.config.wpa_keyver == 'WPA1':
+            tk = self.ptk[32:48]  
+            logging.debug(f"WPA1 TK : {tk}")
+            
         # Key (Message 4 of 4)
-        logging.info("\n-------------------------Key (Message 4 of 4): ")
+        logging.info("-------------------------Key (Message 4 of 4): ")
         eapol_4 = EAPOL(version=1, type=3, len =95) / WPA_key(
                                                                 descriptor_type=254,
                                                                 key_info=self.eapkey_info['m4_keyinfo'],
@@ -272,22 +289,105 @@ class eapol_handshake():
                                                                 replay_counter = replay_counter # 和key 3 匹配, 用于匹配发送的每对消息。
                                                                 )
         self.config.payload = bytes(eapol_4)
-        calc_mic2 = Calc_MIC()
+        calc_mic2 = Calc_MIC(wpa_keyver=self.config.wpa_keyver)
         pmk, ptk, MIC_m4 = calc_mic2.run(self.config)
         # logging.debug(self.config.payload.hex())
         # logging.debug(MIC_m4)
         eapol_4[WPA_key].wpa_key_mic = bytes.fromhex(MIC_m4)
         eapol_4_packet = Dot11(
             type=2,
-            subtype=8,
+            subtype=0,
             FCfield=1,
             addr1=self.config.mac_ap,
             addr2=self.config.mac_sta,
             addr3=self.config.mac_ap,
-            SC=48)  / Dot11QoS() / LLC() / SNAP() / eapol_4
+            SC=48)  / LLC() / SNAP() / eapol_4
         # eapol_4_packet.show()
         send(eapol_4_packet, iface = self.config.iface, verbose=0)
 
+        if self.config.wpa_keyver == 'WPA1':
+            # wpa1 group key handshake
+            # 场景 WPA1 Group handshake
+            logging.info("-------------------------Key (Group Message 1 of 2): ")
+            group1_list = sniff(iface=self.config.iface,
+                                lfilter=lambda r: (r.haslayer(Dot11TKIP) 
+                                                and r[Dot11].addr1 == self.config.mac_sta 
+                                                ) ,
+                                count=1, store=1, timeout=1, 
+                            #  prn = lambda x: logging.debug(x)
+                                )
+            if len(group1_list) > 0:
+                logging.info("成功捕获到 Group Message 1 of 2 ")
+            else:
+                logging.error("未成功捕获到符合条件的 Group Message 1 of 2 ")
+                sys.exit(1)
+            
+            ## decrypt group1
+            group1 = group1_list[0]
+            x = parse_data_pkt( group1[Dot11], tk)
+            # LLC(x).show()
+            
+            # print(f"解密后 : {x.hex()}")
+            replay_counter = LLC(x)[WPA_key].replay_counter
+            gtk_cipher = LLC(x)[WPA_key].wpa_key
+            
+            ## decrypt gtk
+            iv :bytes = LLC(x)[WPA_key].key_iv
+            kek :bytes= self.config.ptk[16:32]
+            key = iv + kek
+            gtk_plain = ARC4_decrypt(key, gtk_cipher, skip=256)
+            
+            # logging.debug(f"gtk_cipher : {gtk_cipher.hex()}")
+            logging.debug(f"GTK : {gtk_plain.hex()}")
+            
+            ## prepare group2
+            logging.info("-------------------------Key (Group Message 2 of 2): ")
+            
+            group_1_eapol = EAPOL(
+                                version="802.1X-2001", type="EAPOL-Key", len=95) \
+                            / WPA_key(
+                                descriptor_type=254,
+                                # key_info=self.eapkey_info['m1_keyinfo'],
+                                key_info=0x0311,
+                                len=32,
+                                replay_counter=replay_counter,
+                                key_iv=bytes.fromhex("00000000000000000000000000000000"),
+                                wpa_key_mic=bytes.fromhex("00000000000000000000000000000000"),
+                                wpa_key_length=0,
+                                )
+            # 更新mic
+            kck = self.config.ptk[:16]
+            mic = hmac.new(kck, bytes(group_1_eapol), hashlib.md5).digest()[:16]
+            logging.debug(f"group2 mic : {mic.hex()}")
+            group_1_eapol[WPA_key].wpa_key_mic = mic
+            # 从LLC到末尾都需要加密
+            plain_str = (
+            LLC(dsap=0xAA, ssap=0xAA, ctrl=3)
+            / SNAP(OUI=0, code=0x888E)
+            / group_1_eapol
+            )
+            
+            mic_key_ap2sta = self.ptk[48:56]
+            mic_key_sta2ap = self.ptk[56:64]
+            data_to_enc = build_MIC_ICV(bytes(plain_str), mic_key_sta2ap, self.config.mac_sta, self.config.mac_ap )
+            tkip_iv = 1 # 递增,步进1
+            tkip_with_payload = build_TKIP_payload(bytes(data_to_enc), tkip_iv, self.config.mac_sta, tk)
+            
+            group_2 = (
+            Dot11(
+                type=2,
+                subtype=0,
+                FCfield="to-DS+protected",
+                addr1=self.config.mac_ap,
+                addr2=self.config.mac_sta,
+                addr3=self.config.mac_ap,
+                SC=4,) 
+            / tkip_with_payload
+            )
+
+            ## send group2
+            sendp(RadioTap() / group_2, iface=self.config.iface, verbose = 0)
+            sys.exit(0)
         return tk
         # return 
 
@@ -354,7 +454,7 @@ def test(
             sys.exit(1)
         
     # 链路认证
-    logging.info("\n-------------------------Link Authentication Request : ")
+    logging.info("-------------------------Link Authentication Request : ")
     connectionphase_1.send_authentication()
 
     if connectionphase_1.state == "Authenticated":
@@ -367,7 +467,7 @@ def test(
         sys.exit(0)
 
     # 链路关联
-    logging.info("\n-------------------------Link Assocation Request : ")
+    logging.info("-------------------------Link Assocation Request : ")
     connectionphase_1.send_assoc_request(ssid=config.ssid, vendor_info=vendor_info)
 
     if connectionphase_1.state == "Associated":
@@ -383,7 +483,7 @@ def test(
     TK = connectionphase_2.run()
     logging.info("WiFi 协商完成!")
     
-    # 场景 测试密钥协商
+    # 场景 4-way handshake
     if scene == Scene.four_way_handshake:
         sys.exit(0)
 

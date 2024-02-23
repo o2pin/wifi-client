@@ -42,7 +42,6 @@ class Calc_MIC():
         nonces = self.min_max(anonce, snonce)
         ptk_inputs = b''.join([b'Pairwise key expansion\x00', macs[0], macs[1], nonces[0], nonces[1], b'\x00'])
         ptk = hmac.new(pmk, ptk_inputs, hashlib.sha1).digest()
-        # ptk = bytes(ptk, encoding='utf-8')
         print("PTK : " + ptk.hex())
         
         
