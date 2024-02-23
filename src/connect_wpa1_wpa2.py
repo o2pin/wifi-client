@@ -40,8 +40,9 @@ class Scene:
     auth = 1
     asso = 2
     four_way_handshake = 3
-    talktoap = 4
-    deauth = 5
+    wpa1_grouphandshake = 4
+    talktoap = 5
+    deauth = 6
     
 FORMAT = "[%(filename)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
@@ -159,10 +160,11 @@ class ConnectionPhase:
             self.state = "Associated"
 
 class eapol_handshake():
-    def __init__(self, DUT_Object, vendor_info):
+    def __init__(self, DUT_Object, vendor_info, scene=3):
         self.config = DUT_Object
         self.eapol_3_found = False
         self.vendor_info = vendor_info
+        self.scene = scene
         
         if self.config.wpa_keyver == 'WPA1':
             self.eapkey_info = {
@@ -305,7 +307,7 @@ class eapol_handshake():
         # eapol_4_packet.show()
         send(eapol_4_packet, iface = self.config.iface, verbose=0)
 
-        if self.config.wpa_keyver == 'WPA1':
+        if self.config.wpa_keyver == 'WPA1' and self.scene == Scene.wpa1_grouphandshake:
             # wpa1 group key handshake
             # 场景 WPA1 Group handshake
             logging.info("-------------------------Key (Group Message 1 of 2): ")
@@ -443,6 +445,7 @@ def test(
         t1.start()
         time.sleep(0.06)
         sendp(pr, iface=config.iface, verbose=0)
+        time.sleep(0.06)
         result = t1.stop()
         
         if len(result) > 0:
@@ -479,7 +482,7 @@ def test(
     if scene == Scene.asso:
         sys.exit(0)
 
-    connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info)
+    connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info,scene=scene)
     TK = connectionphase_2.run()
     logging.info("WiFi 协商完成!")
     
