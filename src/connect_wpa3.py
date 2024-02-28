@@ -31,14 +31,14 @@ from scapy.contrib.wpa_eapol import WPA_key, EAPOL
 from scapy.fields import ShortEnumField,StrFixedLenField
 from scapy.packet import Packet,Raw
 from scapy.utils import randstring
-from scapy.sendrecv import AsyncSniffer
+from scapy.sendrecv import AsyncSniffer, sniff, send, sendp
 from scapy.config import conf as scapyconf
 
 from .libwifi import log,DEBUG
 from .utils_wpa3_crypt import Calc_MIC, CCMPCrypto
 from .utils_wifi_inject import ProbeReq
 
-from socket_hook_py import sendp, sniff 
+from socket_hook_py import AsyncSniffer, sniff, send, sendp
 
 # ----------------------- Utility ---------------------------------
 # FORMAT = "%(asctime)s.%(msecs)d %(levelname)-8s [%(processName)s] [%(threadName)s] %(filename)s:%(lineno)d --- %(message)s"

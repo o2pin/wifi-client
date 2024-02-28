@@ -109,7 +109,7 @@ class Monitor:
         :return:
         """
         # Send out the packet
-        logging.info(f"Send package packet_type: {packet_type}")
+        # logging.info(f"Send package packet_type: {packet_type}")
         if packet_type is None:
             send(packet, verbose=0) # verbose=0, 即不需要显示报文发送提示
 
