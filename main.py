@@ -42,7 +42,8 @@ def main():
     logging.info('start main')
     
     
-    iface = ensure_interface_mode(opt.iface, channel=opt.channel)
+    # iface = ensure_interface_mode(opt.iface, channel=opt.channel)
+    iface = opt.iface
     sta_mac = opt.sta_mac if opt.sta_mac else get_iface_mac(opt.iface)
     timeout = opt.timeout / 1000
 
