@@ -459,8 +459,7 @@ def test(
             vendor_info = RSN.get_rsn_info()
         conf.iface = config.iface       # scapy.config.conf.iface
 
-        monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower(), timeout)
-        connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
+        
 
         # 探测请求
         if scene == Scene.probeReq:
@@ -472,15 +471,21 @@ def test(
                                                     and r.haslayer(Dot11ProbeResp) 
                                                     and r.getlayer(Dot11Elt).info  == config.ssid.encode()
                                                     ) ,
+                                stop_filter=lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                    and r.haslayer(Dot11ProbeResp) 
+                                                    and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                    ) ,
                                 # prn = lambda r: r.summary(),
                                 store=1, 
                                 #  count=1,    # when AsyncSniffer , don't count
                                 timeout=timeout)
             t1.start()
-            time.sleep(0.06)
+            # time.sleep(0.06)
             sendp(pr, iface=config.iface, verbose=0)
-            time.sleep(0.06)
-            result = t1.stop()
+            # time.sleep(0.06)
+            # result = t1.stop()
+            t1.join()
+            result = t1.results
             
             if len(result) > 0:
                 logging.info(f'Success recv Probe response.')
@@ -490,6 +495,10 @@ def test(
                 logging.error(f'Not found Probe response.')
                 sys.exit(1)
             
+            
+        monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower(), timeout)
+        connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
+        
         # 链路认证
         logging.info("-------------------------Link Authentication Request : ")
         connectionphase_1.send_authentication()

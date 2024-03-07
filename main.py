@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--suite', type=str, default="WPA2", help="测试套件.") 
     parser.add_argument('--scene', type=int, default=0, help="场景id.")
     opt = parser.parse_args()
-    logging.info(opt)
+    # logging.info(opt)
     logging.info('start main')
     
     
