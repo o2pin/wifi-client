@@ -78,7 +78,7 @@ class TKIP_info():
 
         return tkip_info
 class Monitor:
-    def __init__(self, mon_ifc, sta_mac, bssid):
+    def __init__(self, mon_ifc, sta_mac, bssid, timeout=1):
         """
 
         :param mon_ifc: WLAN interface to use as a monitor
@@ -94,6 +94,7 @@ class Monitor:
         self.eapol_1 = False
         self.eapol_3_found = False
         self.dot11_rates = Dot11EltRates_mod()
+        self.timeout = timeout
 
     # def ack(self, dest_mac):
     #     dot11 = Dot11(type=1, subtype=13, addr1=dest_mac)
@@ -157,22 +158,24 @@ class Monitor:
                 seen_bssid))
         return self.assoc_found
 
-    def search_auth(self, mp_queue):
-        logging.info("Scanning max 1 seconds for Authentication "
+    def search_auth(self, mp_queue,):
+        logging.info("Scanning for Authentication "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, lfilter=lambda x: x.haslayer(Dot11Auth),
-              stop_filter=self.check_auth, timeout=1, 
-            #   prn = lambda x: logging.debug(x)
+              stop_filter=self.check_auth,
+            #   prn = lambda x: logging.debug(x),
+            timeout = self.timeout
               )
         mp_queue.put(self.auth_found)
 
     def search_assoc_resp(self, mp_queue):
-        logging.info("Scanning max 1 seconds for Association Response "
+        logging.info("Scanning for Association Response "
               "from BSSID {0}".format(self.bssid))
         sniff(iface=self.mon_ifc, 
               lfilter=lambda x: x.haslayer(Dot11AssoResp),
-              stop_filter=self.check_assoc, timeout=1, 
-            #   prn = lambda x: logging.debug(x)
+              stop_filter=self.check_assoc, 
+            #   prn = lambda x: logging.debug(x),
+            timeout=self.timeout
               )
         mp_queue.put(self.assoc_found)
 

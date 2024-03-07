@@ -1,5 +1,9 @@
 import logging, multiprocessing, time, sys
 import hmac, hashlib
+# import timeout_decorator
+# from wrapt_timeout_decorator  import timeout as wrap_timeout
+# import pysnooper
+import asyncio
 
 from scapy.layers.dot11 import (
     Dot11Auth,
@@ -48,12 +52,14 @@ FORMAT = "[%(filename)s:%(lineno)d] --- %(message)s"
 logging.basicConfig(level = logging.DEBUG, format=FORMAT)
 
 class WiFi_Object:
-    def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic="", wpa_keyver='WPA2'):
+    def __init__(self, iface, ssid, psk, mac_ap="", mac_sta="", anonce="", snonce="", payload="", mic="", wpa_keyver='WPA2', timeout=1):
         self.iface:str  = iface
         self.ssid:str  = ssid
         self.psk:str  = psk
         self.mac_ap:str  = mac_ap
         self.mac_sta:str  = mac_sta
+        self.wpa_keyver:str = wpa_keyver        # WPA1 or WPA2
+        self.timeout = timeout
         self.ff_mac:str  = "ff:ff:ff:ff:ff:ff"
         self.anonce:bytes = bytes.fromhex(anonce)
         self.snonce:bytes = bytes.fromhex(snonce)
@@ -62,7 +68,7 @@ class WiFi_Object:
         self.pmk:str = "0" * 40
         self.ptk:str = "0" * 40
         self.encrypt_msg:bytes = "0" * 56
-        self.wpa_keyver:str = wpa_keyver        # WPA1 or WPA2
+        
 
 
 class ConnectionPhase:
@@ -70,11 +76,12 @@ class ConnectionPhase:
     Establish a connection to the AP via the following commands
     """
 
-    def __init__(self, monitor_ifc, sta_mac, bssid):
+    def __init__(self, monitor_ifc, sta_mac, bssid, timeout=1):
         self.state = "Not Connected"
         self.monitor = monitor_ifc
         self.sta_mac = sta_mac
         self.bssid = bssid
+        self.timeout = timeout
 
     def send_authentication(self):
         """
@@ -95,7 +102,7 @@ class ConnectionPhase:
         result_queue = multiprocessing.Queue()
         receive_process = multiprocessing.Process(
             target=self.monitor.search_auth,
-            args=(result_queue, ))
+            args=(result_queue,))
         jobs.append(receive_process)
         send_process = multiprocessing.Process(
             target=self.monitor.send_packet,
@@ -137,7 +144,7 @@ class ConnectionPhase:
         packet /= Dot11Elt(ID=0, info="{}".format(ssid))
         packet /=  vendor_info
         #  RadioTap / Dot11 / Dot11AssoReq / Dot11Elt(ssid) /  Dot11EltRSN / Dot11EltVendorSpecific
-
+        
         jobs = list()
         result_queue = multiprocessing.Queue()
         receive_process = multiprocessing.Process(
@@ -160,11 +167,12 @@ class ConnectionPhase:
             self.state = "Associated"
 
 class eapol_handshake():
-    def __init__(self, DUT_Object, vendor_info, scene=3):
+    def __init__(self, DUT_Object, vendor_info, scene=3, timeout=1):
         self.config = DUT_Object
         self.eapol_3_found = False
         self.vendor_info = vendor_info
         self.scene = scene
+        self.timeout = timeout
         
         if self.config.wpa_keyver == 'WPA1':
             self.eapkey_info = {
@@ -183,19 +191,31 @@ class eapol_handshake():
                 'm4_keyinfo':0x030a,
                 }
 
-    def run(self):
+    async def run(self):
         # Key (Message 1 of 4)
         logging.info("-------------------------Key (Message 1 of 4): ")
-        eapol_p1 = sniff(iface=self.config.iface,
+        capt_eapol_p1 = AsyncSniffer(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(Dot11) 
                                             and r[Dot11].addr1 == self.config.mac_sta 
                                             and r.haslayer(WPA_key) 
                                             and r.getlayer(WPA_key).key_info  == self.eapkey_info['m1_keyinfo']
                                             # and (r.getlayer(WPA_key).key_info  == 0x0089)) ,
                                             ) ,
-                         count=1, store=1, timeout=1, 
+                         stop_filter=lambda r: (r.haslayer(Dot11) 
+                                            and r[Dot11].addr1 == self.config.mac_sta 
+                                            and r.haslayer(WPA_key) 
+                                            and r.getlayer(WPA_key).key_info  == self.eapkey_info['m1_keyinfo']
+                                            # and (r.getlayer(WPA_key).key_info  == 0x0089)) ,
+                                            ) ,
+                         count=1, store=1, 
+                         timeout=self.timeout, 
                         #  prn = lambda x: logging.debug(x)
                          )
+        capt_eapol_p1.start()
+        await asyncio.sleep(0.05)
+        capt_eapol_p1.join()
+        eapol_p1 = capt_eapol_p1.results
+        
         if len(eapol_p1) > 0:
             logging.info("成功捕获到 EAPOL Message 1 of 4 ")
         else:
@@ -233,7 +253,7 @@ class eapol_handshake():
 
         # Compute PTK
         ptk = customPRF512(self.config.pmk, amac, smac, self.config.anonce, self.config.snonce)
-        logging.debug(f"ptk new : {ptk.hex()}")
+        # logging.debug(f"ptk new : {ptk.hex()}")
         setattr(self, 'ptk', ptk)
         
 
@@ -251,20 +271,29 @@ class eapol_handshake():
         # Key (Message 3 of 4)
         logging.info("-------------------------Key (Message 3 of 4): ")
 
-        result = sniff(iface=self.config.iface,
+        capt_eapol_p3 = AsyncSniffer(iface=self.config.iface,
                          lfilter=lambda r: (r.haslayer(EAPOL) 
                                             and r.getlayer(WPA_key).key_info  == self.eapkey_info['m3_keyinfo']
                                             ) ,
+                         stop_filter=lambda r: (r.haslayer(EAPOL) 
+                                            and r.getlayer(WPA_key).key_info  == self.eapkey_info['m3_keyinfo']
+                                            ) ,
                          store=1, count=1,
-                         timeout=1)
-
-        if len(result) > 0:
+                         timeout=self.timeout,
+                         )
+        # print(f"timeout : ", self.timeout)
+        capt_eapol_p3.start()
+        await asyncio.sleep(0.05)
+        capt_eapol_p3.join()
+        eapol_p3 = capt_eapol_p3.results
+        
+        if len(eapol_p3) > 0:
             logging.info("成功捕获到 EAPOl Message 3 of 4")
         else:
             logging.info("未成功捕获到符合条件的 EAPOL Message 3 of 4 ")
             sys.exit(1)
             
-        eapol_3_packet = result[-1]
+        eapol_3_packet = eapol_p3[-1]
         replay_counter = eapol_3_packet[WPA_key].replay_counter
         
         if self.config.wpa_keyver == 'WPA2':
@@ -315,7 +344,8 @@ class eapol_handshake():
                                 lfilter=lambda r: (r.haslayer(Dot11TKIP) 
                                                 and r[Dot11].addr1 == self.config.mac_sta 
                                                 ) ,
-                                count=1, store=1, timeout=1, 
+                                count=1, store=1, 
+                                timeout=self.timeout, 
                             #  prn = lambda x: logging.debug(x)
                                 )
             if len(group1_list) > 0:
@@ -393,7 +423,7 @@ class eapol_handshake():
         return tk
         # return 
 
-
+# @pysnooper.snoop()
 def test(
         iface = "monwlan2",
         ssid = "testnetwork",
@@ -403,122 +433,134 @@ def test(
         scene = 3,
         wpa_keyver= 'WPA2',
         we_will_send = 'ARP',
-        router_ip = '192.168.4.1'
+        router_ip = '192.168.4.1',
+        timeout = 3
 ):
-    config = WiFi_Object(
-        iface = iface,
-        ssid = ssid,
-        psk = psk,
-        mac_ap = ap_mac,
-        mac_sta = sta_mac,
-        anonce = "",
-        snonce = "",
-        payload = (""),
-        wpa_keyver= wpa_keyver,
-    )
-    
-    # logging.debug(config.__dict__)
-
-    if config.wpa_keyver == 'WPA1':
-        vendor_info = TKIP_info.gen_tkip_info()
-    else:
-        vendor_info = RSN.get_rsn_info()
-    conf.iface = config.iface       # scapy.config.conf.iface
-
-    monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower())
-    connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
-
-    # 探测请求
-    if scene == Scene.probeReq:
-        logging.info(f'Start Probe request.')
-        pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+    # @wrap_timeout(2)
+    def create_test_with_timeout():
+        config = WiFi_Object(
+            iface = iface,
+            ssid = ssid,
+            psk = psk,
+            mac_ap = ap_mac,
+            mac_sta = sta_mac,
+            anonce = "",
+            snonce = "",
+            payload = (""),
+            wpa_keyver= wpa_keyver,
+            timeout = timeout
+        )
         
-        t1 = AsyncSniffer(iface=config.iface,
-                            lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
-                                                and r.haslayer(Dot11ProbeResp) 
-                                                and r.getlayer(Dot11Elt).info  == config.ssid.encode()
-                                                ) ,
-                            # prn = lambda r: r.summary(),
-                            store=1, 
-                            #  count=1,    # when AsyncSniffer , don't count
-                            timeout=1)
-        t1.start()
-        time.sleep(0.06)
-        sendp(pr, iface=config.iface, verbose=0)
-        time.sleep(0.06)
-        result = t1.stop()
-        
-        if len(result) > 0:
-            logging.info(f'Success recv Probe response.')
-            if scene == Scene.probeReq:
-                sys.exit(0)
+        # logging.debug(config.__dict__)
+
+        if config.wpa_keyver == 'WPA1':
+            vendor_info = TKIP_info.gen_tkip_info()
         else:
-            logging.error(f'Not found Probe response.')
+            vendor_info = RSN.get_rsn_info()
+        conf.iface = config.iface       # scapy.config.conf.iface
+
+        monitor = Monitor(config.iface, config.mac_sta.lower(), config.mac_ap.lower(), timeout)
+        connectionphase_1 = ConnectionPhase(monitor, config.mac_sta, config.mac_ap)
+
+        # 探测请求
+        if scene == Scene.probeReq:
+            logging.info(f'Start Probe request.')
+            pr = ProbeReq.gen_Probe_req(ssid=config.ssid, dest_addr=config.mac_ap, source_addr=config.mac_sta)
+            
+            t1 = AsyncSniffer(iface=config.iface,
+                                lfilter=lambda r: (r[Dot11].addr1 == config.mac_sta
+                                                    and r.haslayer(Dot11ProbeResp) 
+                                                    and r.getlayer(Dot11Elt).info  == config.ssid.encode()
+                                                    ) ,
+                                # prn = lambda r: r.summary(),
+                                store=1, 
+                                #  count=1,    # when AsyncSniffer , don't count
+                                timeout=timeout)
+            t1.start()
+            time.sleep(0.06)
+            sendp(pr, iface=config.iface, verbose=0)
+            time.sleep(0.06)
+            result = t1.stop()
+            
+            if len(result) > 0:
+                logging.info(f'Success recv Probe response.')
+                if scene == Scene.probeReq:
+                    sys.exit(0)
+            else:
+                logging.error(f'Not found Probe response.')
+                sys.exit(1)
+            
+        # 链路认证
+        logging.info("-------------------------Link Authentication Request : ")
+        connectionphase_1.send_authentication()
+
+        if connectionphase_1.state == "Authenticated":
+            logging.info("STA is authenticated to the AP!")
+        else:
+            logging.info("STA is NOT authenticated to the AP!")
             sys.exit(1)
-        
-    # 链路认证
-    logging.info("-------------------------Link Authentication Request : ")
-    connectionphase_1.send_authentication()
+        # 场景 链路认证
+        if scene == Scene.auth:
+            sys.exit(0)
 
-    if connectionphase_1.state == "Authenticated":
-        logging.info("STA is authenticated to the AP!")
-    else:
-        logging.info("STA is NOT authenticated to the AP!")
-        sys.exit(1)
-    # 场景 链路认证
-    if scene == Scene.auth:
-        sys.exit(0)
+        # 链路关联
+        logging.info("-------------------------Link Assocation Request : ")
+        connectionphase_1.send_assoc_request(
+            ssid=config.ssid, 
+            vendor_info=vendor_info,
+            )
 
-    # 链路关联
-    logging.info("-------------------------Link Assocation Request : ")
-    connectionphase_1.send_assoc_request(ssid=config.ssid, vendor_info=vendor_info)
+        if connectionphase_1.state == "Associated":
+            logging.info("STA is connected to the AP!")
+        else:
+            logging.info("STA is NOT connected to the AP!")
+            sys.exit(1)
+        # 场景 测试关联过程
+        if scene == Scene.asso:
+            sys.exit(0)
 
-    if connectionphase_1.state == "Associated":
-        logging.info("STA is connected to the AP!")
-    else:
-        logging.info("STA is NOT connected to the AP!")
-        sys.exit(1)
-    # 场景 测试关联过程
-    if scene == Scene.asso:
-        sys.exit(0)
+        connectionphase_2 = eapol_handshake(
+            DUT_Object=config,
+            vendor_info=vendor_info,
+            scene=scene,
+            timeout=timeout)
+        TK = asyncio.run(connectionphase_2.run())
+        logging.info("WiFi 协商完成!")
+        
+        # 场景 4-way handshake
+        if scene == Scene.four_way_handshake:
+            sys.exit(0)
 
-    connectionphase_2 = eapol_handshake(DUT_Object=config, vendor_info=vendor_info,scene=scene)
-    TK = connectionphase_2.run()
-    logging.info("WiFi 协商完成!")
-    
-    # 场景 4-way handshake
-    if scene == Scene.four_way_handshake:
-        sys.exit(0)
-
-    # # 和 AP 加密通信
-    if wpa_keyver== 'WPA2':
-        logging.info(f"\n-------------------------Send {we_will_send} Request : ")
-        logging.info(f" TK : {TK}")
-        setattr(config, 'TK', TK)
+        # # 和 AP 加密通信
+        if wpa_keyver== 'WPA2':
+            logging.info(f"\n-------------------------Send {we_will_send} Request : ")
+            logging.info(f" TK : {TK}")
+            setattr(config, 'TK', TK)
+            
+            encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
+            
+            sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
+            logging.info(f'We sent 1 {we_will_send} . ')
+            
+        # 场景 加密通信
+        if scene == Scene.talktoap:
+            sys.exit(0)
         
-        encrypt_packet = ONCE_REQ.request_once(  config= config , req_type= we_will_send, router_ip=router_ip)
         
-        sendp(RadioTap() / encrypt_packet, iface = config.iface, verbose=0)
-        logging.info(f'We sent 1 {we_will_send} . ')
+        # # 从 AP 离开
+        deauth = Dot11(
+                addr1=config.mac_ap,
+                addr2=config.mac_sta,
+                addr3=config.mac_ap,
+                SC=16 * 5) / Dot11Deauth(reason=3)
+        sendp(RadioTap() / deauth, iface = config.iface, verbose=0)
+        logging.info(f'Leave from AP.')
+            
+        # 场景 deauth
+        if scene == Scene.deauth:
+            sys.exit(0)
         
-    # 场景 加密通信
-    if scene == Scene.talktoap:
-        sys.exit(0)
-    
-    
-    # # 从 AP 离开
-    deauth = Dot11(
-            addr1=config.mac_ap,
-            addr2=config.mac_sta,
-            addr3=config.mac_ap,
-            SC=16 * 5) / Dot11Deauth(reason=3)
-    sendp(RadioTap() / deauth, iface = config.iface, verbose=0)
-    logging.info(f'Leave from AP.')
-        
-    # 场景 deauth
-    if scene == Scene.deauth:
-        sys.exit(0)
-    
+    create_test_with_timeout()
     
 if __name__ == "__main__":
     test()

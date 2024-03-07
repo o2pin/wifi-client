@@ -33,7 +33,7 @@ class Calc_MIC():
     
     def calculate_WPA_PMK(self, psk, ssid):
         pmk = hashlib.pbkdf2_hmac('sha1', psk.encode(), ssid.encode(), 4096, 32)
-        print("PMK : " + pmk.hex())
+        # print("PMK : " + pmk.hex())
         
         return pmk
 
@@ -42,7 +42,7 @@ class Calc_MIC():
         nonces = self.min_max(anonce, snonce)
         ptk_inputs = b''.join([b'Pairwise key expansion\x00', macs[0], macs[1], nonces[0], nonces[1], b'\x00'])
         ptk = hmac.new(pmk, ptk_inputs, hashlib.sha1).digest()
-        print("PTK : " + ptk.hex())
+        # print("PTK : " + ptk.hex())
         
         
         return ptk
@@ -51,11 +51,11 @@ class Calc_MIC():
         MIC_Key = ptk[:16]
         if self.wpa_keyver == 'WPA1':
             MIC = hmac.new(MIC_Key,payload ,hashlib.md5).digest()
-            print("MIC : " , MIC[:16].hex())
+            # print("MIC : " , MIC[:16].hex())
             mic = MIC[:16].hex()
         else:
             MIC = hmac.new(MIC_Key,payload ,hashlib.sha1).digest()
-            print("MIC : " , MIC.hex())
+            # print("MIC : " , MIC.hex())
             mic = MIC.hex()
         return mic
 
@@ -114,7 +114,7 @@ class GTKDecrypt():
         ptk , kek , tk = self.generate_ptk_kek()
         kek = bytes.fromhex(kek)
         encrypt_msg = self.config.encrypt_msg
-        print("KEK : ", kek.hex(), encrypt_msg.hex())
+        # print("KEK : ", kek.hex(), encrypt_msg.hex())
         gtk = aes_key_unwrap(kek, encrypt_msg).hex()[60:-4]
         
         return gtk, tk
